@@ -1,0 +1,304 @@
+[
+    {
+        "term": "RD",
+        "definition": "Es el ratio de default - metrica resultante del analisis estadistico del default, dentro de una muestra objetivo. La RD es igual a la suma de defaults sobre el total de observaciones en la muestra objetivo.",
+        "aliases": [
+            "ratio de default",
+            "tasa de default",
+            "default rate",
+            "RD12",
+            "RD6",
+            "Tasa de default real"
+        ]
+    },
+    {
+        "term": "Sobrestimación",
+        "definition": "Desviacion positiva entre la probabilidad de default predicha por el modelo (PD) y la tasa de default real observada (RD). Indica que el modelo predice un mayor riesgo de default del que realmente ocurre.",
+        "aliases": [
+            "Sobrestimacion"
+        ]
+    },
+    {
+        "term": "Subestimación",
+        "definition": "Desviacion negativa entre la probabilidad de default predicha por el modelo (PD) y la tasa de default real observada (RD). Indica que el modelo predice un menor riesgo de default del que realmente ocurre.",
+        "aliases": [
+            "Subestimacion"
+        ]
+    },
+    {
+        "term": "maduración",
+        "definition": "Antiguedad tipica del cliente en meses segun la ventana en que se observe. Se calcula como la diferencia en meses entre la fecha de evaluacion crediticia (CODCOSECHA) y la fecha de observacion (CODMES).",
+        "aliases": [
+            "maduracion",
+            "antiguedad",
+            "antigüedad"
+        ]
+    },
+    {
+        "term": "roll rate",
+        "definition": "Métrica que indica la proporción de clientes que han avanzado a una categoría de morosidad más alta en un período determinado. Se trabaja con roll rates acumulados desde 30 días hasta 150 días, separándolos por cortes de 30 días.",
+        "aliases": [
+            "moras tempranas"
+        ]
+    },
+    {
+        "term": "mmgr",
+        "definition": "Equipo de modeladores de riesgo crediticio del BCP encargado del desarrollo y monitoreo de modelos de riesgo. Se le realiza la auditoría respectiva (validación metodológica).",
+        "aliases": [
+            "fabrica",
+            "metologia de modelamiento de gestion de riesgo",
+            "primera linea de defensa",
+            "primera linea",
+            "modeladores",
+            "equipo de modeladores",
+            "equipo de seguimiento"
+        ]
+    },
+    {
+        "term": "mrm",
+        "definition": "Equipo de validadores de riesgo crediticio del BCP encargado de la validación metodológica y de seguimiento de modelos de riesgo.",
+        "aliases": [
+            "validadores",
+            "equipo de validadores",
+            "segunda linea de defensa",
+            "segunda linea",
+            "equipo de validacion",
+            "VIRC"
+        ]
+    },
+    {
+        "term": "DEFAULT6",
+        "definition": "Variable objetivo que indica si un cliente incurrió en default (mora mayor a 90 días) en los siguientes 6 meses posteriores a la evaluación crediticia.",
+        "aliases": [
+            "def6",
+            "default_6",
+            "target_6",
+            "default6m",
+            "default 6"
+        ]
+    },
+    {
+        "term": "PSI",
+        "definition": "Population Stability Index - Métrica que mide la estabilidad de la distribución de una variable entre muestras de Train y OOT.",
+        "aliases": [
+            "population stability index",
+            "indice de estabilidad poblacional",
+            "psi index"
+        ]
+    },
+    {
+        "term": "GINI",
+        "definition": "Coeficiente de Gini - Métrica derivada del AUC que mide la capacidad de ordenamiento del modelo. Se calcula como 2*AUC-1. Valores cercanos a 1 indican mejor capacidad discriminante.",
+        "aliases": [
+            "coeficiente gini",
+            "indice gini",
+            "gini coefficient"
+        ]
+    },
+    {
+        "term": "DEFAULT12",
+        "definition": "Variable objetivo que indica si un cliente incurrió en default (mora mayor a 90 días) en los siguientes 12 meses posteriores a la evaluación crediticia.",
+        "aliases": [
+            "def12",
+            "default_12",
+            "target_12",
+            "default12m",
+            "default 12"
+        ]
+    },
+    {
+        "term": "CALIBRACIÓN",
+        "definition": "Proceso de ajuste del modelo para que las probabilidades predichas coincidan con las frecuencias observadas de default en la muestra de desarrollo.",
+        "aliases": [
+            "calibracion",
+            "recalibracion",
+            "ajuste del modelo",
+            "calibration"
+        ]
+    },
+    {
+        "term": "TARGET",
+        "definition": "Variable objetivo o dependiente que el modelo intenta predecir. En modelos de riesgo crediticio, típicamente representa la ocurrencia de default.",
+        "aliases": [
+            "variable objetivo",
+            "variable dependiente",
+            "etiqueta",
+            "label"
+        ]
+    },
+    {
+        "term": "OUTLIERS",
+        "definition": "Valores atípicos que se alejan significativamente del comportamiento normal de los datos. Tienden a ser menos del 0.2% en cada cola de la distribución.",
+        "aliases": [
+            "valores atipicos",
+            "anomalias",
+            "datos atípicos",
+            "valores extremos"
+        ]
+    },
+    {
+        "term": "VARIABLES FINALISTAS",
+        "definition": "Conjunto final de variables predictoras seleccionadas para el modelo después del proceso de selección y validación estadística.",
+        "aliases": [
+            "variables finales",
+            "predictores finales",
+            "features finales",
+            "variables seleccionadas"
+        ]
+    },
+    {
+        "term": "BACKTESTING",
+        "definition": "Proceso de validación que evalúa el rendimiento histórico del modelo utilizando datos de períodos pasados.",
+        "aliases": [
+            "back testing",
+            "validacion historica",
+            "prueba retrospectiva",
+            "validación temporal"
+        ]
+    },
+    {
+        "term": "OVERFITTING",
+        "definition": "Fenómeno que ocurre cuando un modelo se ajusta excesivamente a los datos de entrenamiento, perdiendo capacidad de generalización.",
+        "aliases": [
+            "sobreajuste",
+            "over fitting",
+            "sobreentrenamiento",
+            "ajuste excesivo"
+        ]
+    },
+    {
+        "term": "TIER",
+        "definition": "Clasificación de modelos según su criticidad e impacto en el negocio. Tier I son los más críticos.",
+        "aliases": [
+            "nivel",
+            "categoria",
+            "clasificacion",
+            "tipo de modelo"
+        ]
+    },
+    {
+        "term": "challenge",
+        "definition": "Metodología donde se compara el modelo actual (Champion) con modelos alternativos (Challengers) para identificar mejores opciones.",
+        "aliases": [
+            "campeon",
+            "champion",
+            "comparacion de modelos",
+            "benchmarking",
+            "optimizacion"
+        ]
+    },
+    {
+        "term": "PD",
+        "definition": "Probability of Default - Probabilidad de que un cliente incurra en default dentro de un período específico, típicamente 12 meses.",
+        "aliases": [
+            "probabilidad de default",
+            "prob default",
+            "probability default",
+            "pd model"
+        ]
+    },
+    {
+        "term": "LGD",
+        "definition": "Loss Given Default - Porcentaje de pérdida esperada en caso de que ocurra un default, expresado como proporción de la exposición.",
+        "aliases": [
+            "perdida dado default",
+            "loss given default",
+            "severidad",
+            "tasa de recuperacion"
+        ]
+    },
+    {
+        "term": "EAD",
+        "definition": "Exposure at Default - Monto de exposición esperada al momento del default, considerando utilizaciones futuras de líneas de crédito.",
+        "aliases": [
+            "exposicion al default",
+            "exposure at default",
+            "exposicion esperada"
+        ]
+    },
+    {
+        "term": "moras tempranas",
+        "definition": "Comportamiento de clientes que tienen moras en los primeros 30-60 días. En seguimiento se traduce como el equivalente comportamental de vista completa de desempeño.",
+        "aliases": [
+            "early arrears",
+            "puntos blancos del seguimiento"
+        ]
+    },
+    {
+        "term": "discriminacion",
+        "definition": "Evaluación de un modelo bajo la bondad de ajuste, teniendo en cuenta la capacidad del modelo para diferenciar entre clientes bajo el target. Para target continuo se usa R2, para binario AUC o GINI.",
+        "aliases": [
+            "discrimination",
+            "discriminative power",
+            "predictive power"
+        ]
+    },
+    {
+        "term": "default temprano",
+        "definition": "Comportamiento de clientes con vista de desempeño de impago insuficiente respecto al target de default evaluado.",
+        "aliases": [
+            "early default",
+            "puntos rojos del seguimiento"
+        ]
+    },
+    {
+        "term": "seguimiento",
+        "definition": "Evaluación de un modelo bajo diversos tipos de muestras para evaluar el comportamiento del valor estimado vs el real, a nivel calibración, discriminación o estabilidad.",
+        "aliases": [
+            "tracking",
+            "tracking del target",
+            "tracking del modelo",
+            "monitoreo",
+            "monitoreo del modelo",
+            "seguimiento del modelo"
+        ]
+    },
+    {
+        "term": "ModelOps",
+        "definition": "Equipo de automatización e innovación en procesos de modelamiento e implementación de modelos. Prioridades: estandarización, automatización, calidad y eficiencia del ciclo de vida del modelo.",
+        "aliases": [
+            "modelops",
+            "model ops",
+            "automatizacion primera linea"
+        ]
+    },
+    {
+        "term": "Transform VI",
+        "definition": "Equipo de validación de procesos de automatización del modelamiento e implementación de modelos. Realiza una intensidad de validación superior a la primera línea.",
+        "aliases": [
+            "transform vi",
+            "transformvi",
+            "equipo de validación de herramientas",
+            "validacion de herramientas analiticas",
+            "validación de herramientas analíticas"
+        ]
+    },
+    {
+        "term": "modulo",
+        "definition": "Conjunto de funciones y herramientas para tareas específicas en un proceso de automatización. Fabricados por ModelOps, validados por Transform VI.",
+        "aliases": [
+            "module",
+            "modules",
+            "modulos",
+            "modulo de automatizacion"
+        ]
+    },
+    {
+        "term": "snippet",
+        "definition": "Función mínima para realizar una tarea limitada y con poca parametría. Fabricados por ModelOps, validados por Transform VI.",
+        "aliases": [
+            "snippets",
+            "snippets de automatizacion",
+            "funcion aislada"
+        ]
+    },
+    {
+        "term": "workflow",
+        "definition": "Flujo completo de automatización, compuesto de uno o varios pipelines, que ejecutan una batería de módulos internos. Fabricados por ModelOps, validados por Transform VI.",
+        "aliases": [
+            "workflows",
+            "workflows de automatizacion",
+            "flujo completo de automatizacion"
+        ]
+    }
+]

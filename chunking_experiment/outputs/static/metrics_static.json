@@ -1,0 +1,15 @@
+{
+  "chunk_count": 13,
+  "source_file_count": 5,
+  "avg_chars": 1499.92,
+  "min_chars": 476,
+  "max_chars": 1800,
+  "chunks_by_source": {
+    "METOD5/acceptance.md": 3,
+    "METOD5/boundaries.md": 2,
+    "METOD5/criticalities.md": 3,
+    "METOD5/exceptions.md": 2,
+    "METOD5/overview.md": 3
+  },
+  "chunks_with_heading_metadata": 0
+}
