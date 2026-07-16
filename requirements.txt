@@ -1,0 +1,14 @@
+# Modelos y proveedores
+openai
+mlflow
+
+# Configuracion local y certificados SSL
+python-dotenv
+truststore
+
+# Lectura y procesamiento de documentos
+openpyxl
+python-docx
+beautifulsoup4
+pypdf
+Pillow
