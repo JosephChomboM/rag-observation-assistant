@@ -96,10 +96,18 @@ def build_evidence_index(
     chunk_size: int = 1800,
     chunk_overlap: int = 200,
     rebuild: bool = False,
+    source_scope: str = "metod",
+    summary_prefix: str = "evidence",
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     files = list_evidence_files(input_dir)
     documents = parse_evidence_files(files)
-    chunks = build_evidence_chunks(documents, metod_id, chunk_size=chunk_size, overlap=chunk_overlap)
+    chunks = build_evidence_chunks(
+        documents,
+        metod_id,
+        chunk_size=chunk_size,
+        overlap=chunk_overlap,
+        common_metadata={"source_scope": source_scope},
+    )
     existing = [] if rebuild else read_jsonl(index_path)
     rows, stats = embed_rows_with_cache(
         _evidence_rows(chunks),
@@ -108,12 +116,17 @@ def build_evidence_index(
         embedding_model=embedding_model,
     )
     write_jsonl(index_path, rows)
+    parsed_documents_key = (
+        "parsed_documents"
+        if summary_prefix == "evidence"
+        else f"{summary_prefix}_parsed_documents"
+    )
     return rows, {
-        "evidence_files": len(files),
-        "parsed_documents": len(documents),
-        "evidence_chunks": len(chunks),
-        "evidence_embeddings_created": stats.created,
-        "evidence_embeddings_reused": stats.reused,
+        f"{summary_prefix}_files": len(files),
+        parsed_documents_key: len(documents),
+        f"{summary_prefix}_chunks": len(chunks),
+        f"{summary_prefix}_embeddings_created": stats.created,
+        f"{summary_prefix}_embeddings_reused": stats.reused,
     }
 
 
@@ -259,7 +272,10 @@ def run_observation_pipeline(
     active_config = config or load_config()
     clean_metod = metod_id.strip().upper()
     paths = metod_paths(active_config, clean_metod)
+    ensure_dir(paths["input_dir"])
+    ensure_dir(paths["global_input_dir"])
     ensure_dir(paths["index_dir"])
+    ensure_dir(paths["global_index_dir"])
     ensure_dir(active_config.outputs_base_dir)
 
     if not os.path.exists(paths["manifest_path"]):
@@ -293,6 +309,18 @@ def run_observation_pipeline(
         chunk_overlap=active_config.chunk_overlap,
         rebuild=rebuild_evidence_index,
     )
+    global_context_rows, global_context_summary = build_evidence_index(
+        "GLOBAL",
+        paths["global_input_dir"],
+        paths["global_context_index_path"],
+        client.embed_text,
+        active_config.embedding_deployment,
+        chunk_size=active_config.chunk_size,
+        chunk_overlap=active_config.chunk_overlap,
+        rebuild=rebuild_evidence_index,
+        source_scope="global",
+        summary_prefix="global_context",
+    )
     glossary_path = os.path.join(active_config.knowledge_base_dir, "_shared", "glossary_data.json")
     glossary_rows, glossary_stats = build_glossary_index(
         glossary_path,
@@ -320,6 +348,12 @@ def run_observation_pipeline(
             active_config.top_k_evidence,
         )
         retrieved_evidence = compact_retrieved_evidence(selected_evidence_rows)
+        selected_global_context_rows = retrieve_top_k(
+            query_embedding,
+            global_context_rows,
+            active_config.top_k_global_context,
+        )
+        retrieved_global_context = compact_retrieved_evidence(selected_global_context_rows)
         selected_glossary_rows = _select_glossary_rows(
             query_text,
             query_embedding,
@@ -335,6 +369,7 @@ def run_observation_pipeline(
             prueba,
             prueba_markdown,
             retrieved_evidence,
+            retrieved_global_context,
             selected_glossary_rows,
             attached_image_files=attached_image_files,
         )
@@ -369,13 +404,27 @@ def run_observation_pipeline(
                     "term": row.get("term"),
                 }
             )
+        for row in selected_global_context_rows:
+            retrieval_debug_rows.append(
+                {
+                    "metod_id": clean_metod,
+                    "prueba_id": prueba.prueba_id,
+                    "source_type": "global_context",
+                    "score": row.get("score"),
+                    "chunk_id": row.get("id"),
+                    "source_file": row.get("source_file"),
+                    "source_scope": "global",
+                }
+            )
 
     run_id = utc_run_id(clean_metod)
     usage_summary = {
         **evidence_summary,
+        **global_context_summary,
         "pruebas_processed": len(pruebas),
         "controls_processed": sum(len(prueba.controls) for prueba in pruebas),
         "llm_generation_requests": len(pruebas),
+        "top_k_global_context_per_prueba": active_config.top_k_global_context,
         "max_prompt_images_per_prueba": active_config.max_prompt_images,
         "glossary_embeddings_created": glossary_stats.created,
         "glossary_embeddings_reused": glossary_stats.reused,

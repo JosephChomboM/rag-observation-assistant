@@ -19,6 +19,7 @@ class AppConfig:
     embedding_deployment: str
     chat_deployment: str
     top_k_evidence: int = 8
+    top_k_global_context: int = 4
     top_k_glossary: int = 5
     max_prompt_images: int = 2
     chunk_size: int = 1800
@@ -98,6 +99,7 @@ def load_config() -> AppConfig:
         embedding_deployment=resolve_embedding_deployment(embedding_provider),
         chat_deployment=resolve_chat_deployment(chat_provider),
         top_k_evidence=int(os.getenv("SOFTIA_TOP_K_EVIDENCE", "8")),
+        top_k_global_context=int(os.getenv("SOFTIA_TOP_K_GLOBAL_CONTEXT", "4")),
         top_k_glossary=int(os.getenv("SOFTIA_TOP_K_GLOSSARY", "5")),
         max_prompt_images=int(os.getenv("SOFTIA_MAX_PROMPT_IMAGES", "2")),
         chunk_size=int(os.getenv("SOFTIA_CHUNK_SIZE", "1800")),
@@ -112,7 +114,9 @@ def metod_paths(config: AppConfig, metod_id: str) -> dict[str, str]:
         "pruebas_dir": os.path.join(config.knowledge_base_dir, clean_metod, "pruebas"),
         "manifest_path": os.path.join(config.knowledge_base_dir, clean_metod, "manifest.json"),
         "input_dir": os.path.join(config.inputs_base_dir, clean_metod),
+        "global_input_dir": os.path.join(config.inputs_base_dir, "_global"),
         "index_dir": os.path.join(config.indexes_base_dir, clean_metod),
+        "global_index_dir": os.path.join(config.indexes_base_dir, "_global"),
         "evidence_index_path": os.path.join(
             config.indexes_base_dir,
             clean_metod,
@@ -127,6 +131,11 @@ def metod_paths(config: AppConfig, metod_id: str) -> dict[str, str]:
             config.indexes_base_dir,
             clean_metod,
             "prueba_profile_embeddings.jsonl",
+        ),
+        "global_context_index_path": os.path.join(
+            config.indexes_base_dir,
+            "_global",
+            "global_context_embeddings.jsonl",
         ),
     }
 

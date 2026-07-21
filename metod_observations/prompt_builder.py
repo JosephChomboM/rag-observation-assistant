@@ -10,6 +10,7 @@ def build_generation_prompt(
     prueba: PruebaSpec,
     prueba_markdown: str,
     evidence: list[RetrievedChunk],
+    global_context: list[RetrievedChunk],
     glossary_rows: list[dict],
     attached_image_files: list[str] | None = None,
 ) -> str:
@@ -23,6 +24,17 @@ def build_generation_prompt(
         }
         for item in evidence
     ]
+    global_context_payload = [
+        {
+            "chunk_id": item.chunk_id,
+            "archivo": item.source_file,
+            "score": round(item.score, 4),
+            "extracto": item.text[:1800],
+            "metadata": item.metadata,
+        }
+        for item in global_context
+    ]
+
     glossary_payload = [
         {
             "term": row.get("term"),
@@ -44,6 +56,9 @@ Reglas obligatorias:
 - No inventes evidencia ni valores.
 - Usa solo las evidencias recuperadas cuando sean suficientes.
 - Si se adjuntan imagenes al mensaje, analizalas directamente y usalas solo si son relevantes para la prueba.
+- Usa el contexto global para interpretar nombres y roles de variables, parametros y contexto del modelo.
+- El contexto global no prueba por si solo que un control se cumple o incumple.
+- No incluyas archivos de contexto global en evidencias_usadas.
 - Si no hay sustento suficiente, hay_observacion debe ser false y observacion debe ser "".
 - La criticidad, si existe, solo puede ser una de: {CRITICALITY_ENUM_TEXT}.
 - Si hay_observacion es false, criticidad debe ser null.
@@ -75,6 +90,10 @@ ESPECIFICACION DE LA PRUEBA:
 
 GLOSARIO RELEVANTE:
 {json.dumps(glossary_payload, ensure_ascii=False, indent=2)}
+
+
+CONTEXTO GLOBAL COMPARTIDO PARA TODOS LOS METOD:
+{json.dumps(global_context_payload, ensure_ascii=False, indent=2)}
 
 IMAGENES ADJUNTAS AL MENSAJE:
 {json.dumps(attached_images_text, ensure_ascii=False, indent=2)}

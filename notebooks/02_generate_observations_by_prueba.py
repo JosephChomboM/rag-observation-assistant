@@ -6,8 +6,11 @@
 """
 User notebook: generate one consolidated observation per prueba.
 
-The user selects a METOD and uploads evidence into:
+The user selects a METOD and uploads METOD evidence into:
 /Workspace/Users/<user>/softia_mvp/inputs/<METOD>/
+
+Shared variable configuration and model context go into:
+/Workspace/Users/<user>/softia_mvp/inputs/_global/
 
 The notebook reads admin-managed knowledge from:
 /dbfs/FileStore/softia_mvp/knowledge/<METOD>/
@@ -69,8 +72,9 @@ try:
     )
     dbutils.widgets.text("azure_embedding_deployment", DEFAULT_AZURE_EMBEDDING_DEPLOYMENT, "Azure embedding deployment")
     dbutils.widgets.text("azure_chat_deployment", DEFAULT_AZURE_CHAT_DEPLOYMENT, "Azure chat deployment")
-    dbutils.widgets.dropdown("rebuild_evidence_index", "false", ["false", "true"], "Rebuild evidence index")
+    dbutils.widgets.dropdown("rebuild_evidence_index", "false", ["false", "true"], "Rebuild input indexes")
     dbutils.widgets.text("top_k_evidence", "8", "Top K evidence")
+    dbutils.widgets.text("top_k_global_context", "4", "Top K global context")
     dbutils.widgets.text("top_k_glossary", "5", "Top K glossary")
     dbutils.widgets.text("max_prompt_images", "0", "Max prompt images por prueba")
     dbutils.widgets.dropdown("run_mode", "full", ["full", "prueba_unica"], "Run mode")
@@ -139,6 +143,7 @@ config = replace(
     embedding_deployment=embedding_deployment,
     chat_deployment=chat_deployment,
     top_k_evidence=int(get_widget("top_k_evidence", "8")),
+    top_k_global_context=int(get_widget("top_k_global_context", "4")),
     top_k_glossary=int(get_widget("top_k_glossary", "5")),
     max_prompt_images=int(get_widget("max_prompt_images", "0")),
 )
@@ -151,6 +156,8 @@ prueba_id = get_widget("prueba_id") or None
 print("METOD:", metod_id)
 print("Workspace base:", config.workspace_base_dir)
 print("Knowledge base:", config.knowledge_base_dir)
+print("METOD evidence input:", os.path.join(config.inputs_base_dir, metod_id))
+print("Global context input:", os.path.join(config.inputs_base_dir, "_global"))
 print("Provider:", provider)
 print("Embedding endpoint/deployment:", config.embedding_deployment)
 print("Chat endpoint/deployment:", config.chat_deployment)
@@ -158,6 +165,7 @@ print("Run mode:", run_mode)
 print("Prueba ID:", prueba_id or "all")
 print("Top K evidence:", config.top_k_evidence)
 print("Top K glossary:", config.top_k_glossary)
+print("Top K global context:", config.top_k_global_context)
 print("Max prompt images:", config.max_prompt_images)
 
 # COMMAND ----------

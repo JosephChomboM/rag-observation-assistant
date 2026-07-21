@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from typing import Any
 
 from .schemas import EvidenceChunk, ParsedDocument
 
@@ -33,8 +34,10 @@ def build_evidence_chunks(
     metod_id: str,
     chunk_size: int = 1800,
     overlap: int = 200,
+    common_metadata: dict[str, Any] | None = None,
 ) -> list[EvidenceChunk]:
     chunks: list[EvidenceChunk] = []
+    shared_metadata = common_metadata or {}
     for doc_index, document in enumerate(documents, start=1):
         parts = split_text(document.text, chunk_size=chunk_size, overlap=overlap)
         source_name = Path(document.source_file).name
@@ -50,6 +53,7 @@ def build_evidence_chunks(
                         "source_path": document.source_file,
                         "content_type": document.content_type,
                         **document.metadata,
+                        **shared_metadata,
                     },
                     text_sha256=text_sha256(part),
                 )
