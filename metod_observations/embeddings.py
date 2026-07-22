@@ -18,107 +18,91 @@ def text_hash(text: str) -> str:
 
 
 class ModelClient:
-    """Small provider wrapper; avoids bringing a framework into the MVP."""
+    """Small Azure OpenAI client for embeddings and structured responses."""
 
     def __init__(
         self,
-        embedding_provider: str = "azure",
-        chat_provider: str = "azure",
-        embedding_deployment: str = "text-embedding-3-small",
-        chat_deployment: str = "gpt-4o-mini",
+        embedding_deployment: str,
+        chat_deployment: str,
+        reasoning_effort: str = "high",
     ) -> None:
-        self.embedding_provider = embedding_provider
-        self.chat_provider = chat_provider
         self.embedding_deployment = embedding_deployment
         self.chat_deployment = chat_deployment
-        self._azure_client = None
-        self._databricks_client = None
+        self.reasoning_effort = reasoning_effort
+        self._openai_client = None
 
-    def _azure(self):
-        if self._azure_client is None:
+    def _client(self):
+        if self._openai_client is None:
             endpoint = os.getenv("AZURE_OPENAI_ENDPOINT", "").strip()
             api_key = os.getenv("AZURE_OPENAI_API_KEY", "").strip()
-            api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21").strip()
             if not endpoint or not api_key:
                 raise ValueError("Missing AZURE_OPENAI_ENDPOINT or AZURE_OPENAI_API_KEY.")
-            from openai import AzureOpenAI
 
-            self._azure_client = AzureOpenAI(
-                azure_endpoint=endpoint,
+            from openai import OpenAI
+
+            base_url = endpoint.rstrip("/")
+            if not base_url.endswith("/openai/v1"):
+                base_url = f"{base_url}/openai/v1"
+            self._openai_client = OpenAI(
+                base_url=f"{base_url}/",
                 api_key=api_key,
-                api_version=api_version,
             )
-        return self._azure_client
-
-    def _databricks(self):
-        if self._databricks_client is None:
-            import mlflow.deployments
-
-            self._databricks_client = mlflow.deployments.get_deploy_client("databricks")
-        return self._databricks_client
+        return self._openai_client
 
     def embed_text(self, text: str) -> list[float]:
-        if self.embedding_provider == "azure":
-            response = self._azure().embeddings.create(
-                model=self.embedding_deployment,
-                input=text,
+        if not self.embedding_deployment:
+            raise ValueError(
+                "Missing embedding deployment. Set AZURE_OPENAI_EMBEDDING_DEPLOYMENT "
+                "or DEPLOYMENT_EMB_SMALL in .env."
             )
-            return response.data[0].embedding
-
-        if self.embedding_provider == "databricks":
-            response = self._databricks().predict(
-                endpoint=self.embedding_deployment,
-                inputs={"input": [text]},
-            )
-            return response["data"][0]["embedding"]
-
-        raise ValueError(f"Unsupported embedding provider: {self.embedding_provider}")
+        response = self._client().embeddings.create(
+            model=self.embedding_deployment,
+            input=text,
+        )
+        return response.data[0].embedding
 
     def chat_json(
         self,
         prompt: str,
         image_data_urls: list[str] | None = None,
-        max_tokens: int = 1800,
-        temperature: float = 0.1,
+        response_schema: dict[str, Any] | None = None,
+        max_output_tokens: int = 1800,
     ) -> str:
-        user_content: str | list[dict[str, Any]]
-        if image_data_urls:
-            user_content = [{"type": "text", "text": prompt}]
-            user_content.extend(
-                {"type": "image_url", "image_url": {"url": data_url}}
-                for data_url in image_data_urls
+        if not self.chat_deployment:
+            raise ValueError(
+                "Missing chat deployment. Set AZURE_OPENAI_CHAT_DEPLOYMENT, "
+                "DEPLOYMENT_GPT54 or DEPLOYMENT_AZURE in .env."
             )
-        else:
-            user_content = prompt
+        if response_schema is None:
+            raise ValueError("response_schema is required for structured output.")
 
-        messages = [
+        content: list[dict[str, Any]] = [{"type": "input_text", "text": prompt}]
+        content.extend(
             {
-                "role": "system",
-                "content": "Eres un validador metodologico. Responde solo JSON valido.",
+                "type": "input_image",
+                "image_url": data_url,
+                "detail": "auto",
+            }
+            for data_url in image_data_urls or []
+        )
+
+        response = self._client().responses.create(
+            model=self.chat_deployment,
+            instructions="Eres un validador metodologico. Sigue el esquema de salida.",
+            input=[{"role": "user", "content": content}],
+            reasoning={"effort": self.reasoning_effort},
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "observation_result",
+                    "strict": True,
+                    "schema": response_schema,
+                }
             },
-            {"role": "user", "content": user_content},
-        ]
-        if self.chat_provider == "azure":
-            response = self._azure().chat.completions.create(
-                model=self.chat_deployment,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            return response.choices[0].message.content or ""
-
-        if self.chat_provider == "databricks":
-            response = self._databricks().predict(
-                endpoint=self.chat_deployment,
-                inputs={
-                    "messages": messages,
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                },
-            )
-            return response["choices"][0]["message"]["content"]
-
-        raise ValueError(f"Unsupported chat provider: {self.chat_provider}")
+            max_output_tokens=max_output_tokens,
+            store=False,
+        )
+        return response.output_text
 
 
 def embed_rows_with_cache(

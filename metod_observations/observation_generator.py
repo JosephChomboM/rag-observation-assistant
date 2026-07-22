@@ -4,7 +4,12 @@ import json
 import re
 from typing import Any, Callable
 
-from .schemas import ObservationResult, PruebaSpec, VALID_CRITICALITIES
+from .schemas import (
+    OBSERVATION_JSON_SCHEMA,
+    ObservationResult,
+    PruebaSpec,
+    VALID_CRITICALITIES,
+)
 
 
 def strip_json_fence(text: str) -> str:
@@ -68,7 +73,11 @@ def generate_observation(
     chat_fn: Callable[..., str],
     image_data_urls: list[str] | None = None,
 ) -> ObservationResult:
-    raw = chat_fn(prompt, image_data_urls=image_data_urls)
+    raw = chat_fn(
+        prompt,
+        image_data_urls=image_data_urls,
+        response_schema=OBSERVATION_JSON_SCHEMA,
+    )
     payload = parse_json_object(raw)
     return validate_observation_payload(payload, prueba)
 

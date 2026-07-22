@@ -1,5 +1,5 @@
 # Databricks notebook source
-# MAGIC %pip install openpyxl
+# MAGIC %pip install --upgrade openai python-dotenv truststore openpyxl
 
 # COMMAND ----------
 
@@ -9,6 +9,8 @@ Admin notebook: build METOD knowledge from the Excel source of truth.
 Only admins should run this notebook. It converts each Excel sheet into:
 - one markdown per prueba under knowledge/<METOD>/pruebas/
 - one manifest.json under knowledge/<METOD>/
+- prueba profile embeddings under knowledge/_indexes/<METOD>/
+- glossary embeddings under knowledge/_indexes/_shared/
 
 In production, SOFTIA_KNOWLEDGE_BASE_DIR should point to:
 /dbfs/FileStore/softia_mvp/knowledge
@@ -16,13 +18,21 @@ In production, SOFTIA_KNOWLEDGE_BASE_DIR should point to:
 
 # COMMAND ----------
 
+import json
 import os
 import sys
 from dataclasses import replace
+import truststore
+from dotenv import load_dotenv
+
+load_dotenv(".env", override=True)
+truststore.inject_into_ssl()
+
 
 try:
     dbutils.widgets.text("excel_path", "", "Excel maestro")
     dbutils.widgets.text("sheet_name", "", "Hoja opcional")
+    dbutils.widgets.dropdown("rebuild_embeddings", "false", ["false", "true"], "Rebuild embeddings")
     dbutils.widgets.text(
         "knowledge_base_dir",
         os.getenv("SOFTIA_KNOWLEDGE_BASE_DIR", "/dbfs/FileStore/softia_mvp/knowledge"),
@@ -39,12 +49,12 @@ def get_widget(name: str, default: str = "") -> str:
         return os.getenv(name.upper(), default).strip()
 
 
-repo_root = os.getcwd()
+repo_root = os.getenv("SOFTIA_CODE_PATH", os.getcwd()).strip()
 if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
 
 from metod_observations.config import load_config  # noqa: E402
-from metod_observations.pipeline import build_admin_knowledge  # noqa: E402
+from metod_observations.pipeline import build_admin_assets  # noqa: E402
 
 # COMMAND ----------
 
@@ -56,6 +66,7 @@ if not excel_path:
     raise ValueError("Set widget excel_path with the admin Excel file path.")
 
 config = replace(load_config(), knowledge_base_dir=knowledge_base_dir)
+rebuild_embeddings = get_widget("rebuild_embeddings", "false").lower() == "true"
 
 print("Excel:", excel_path)
 print("Sheet:", sheet_name or "all")
@@ -63,12 +74,16 @@ print("Knowledge base:", config.knowledge_base_dir)
 
 # COMMAND ----------
 
-manifests = build_admin_knowledge(
+print("Embedding deployment:", config.embedding_deployment)
+print("Rebuild embeddings:", rebuild_embeddings)
+result = build_admin_assets(
     excel_path=excel_path,
     knowledge_base_dir=config.knowledge_base_dir,
     sheet_name=sheet_name,
+    rebuild_embeddings=rebuild_embeddings,
     config=config,
 )
+manifests = result["manifests"]
 
 for metod_id, manifest in manifests.items():
     print(
@@ -76,5 +91,7 @@ for metod_id, manifest in manifests.items():
         f"controles={manifest['controls_count']} "
         f"source={manifest['source_file']}"
     )
+
+print(json.dumps(result["embedding_summary"], ensure_ascii=False, indent=2))
 
 print("Admin knowledge build completed.")

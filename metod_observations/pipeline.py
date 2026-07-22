@@ -30,10 +30,13 @@ def build_admin_knowledge(
     sheet_name: str | None = None,
     config: AppConfig | None = None,
 ) -> dict[str, dict]:
-    active_config = config or load_config()
-    output_dir = knowledge_base_dir or active_config.knowledge_base_dir
-    pruebas_by_metod = load_pruebas_from_excel(excel_path, sheet_name=sheet_name)
-    return build_knowledge_for_all_metods(pruebas_by_metod, output_dir)
+    result = build_admin_assets(
+        excel_path=excel_path,
+        knowledge_base_dir=knowledge_base_dir,
+        sheet_name=sheet_name,
+        config=config,
+    )
+    return result["manifests"]
 
 
 def _control_from_dict(row: dict[str, Any]) -> ControlSpec:
@@ -204,6 +207,89 @@ def build_profile_index(
     write_jsonl(index_path, embedded)
     return embedded, stats
 
+def build_admin_assets(
+    excel_path: str,
+    knowledge_base_dir: str | None = None,
+    sheet_name: str | None = None,
+    rebuild_embeddings: bool = False,
+    config: AppConfig | None = None,
+    model_client: ModelClient | None = None,
+) -> dict[str, Any]:
+    active_config = config or load_config()
+    output_dir = knowledge_base_dir or active_config.knowledge_base_dir
+    pruebas_by_metod = load_pruebas_from_excel(excel_path, sheet_name=sheet_name)
+    manifests = build_knowledge_for_all_metods(pruebas_by_metod, output_dir)
+
+    client = model_client or ModelClient(
+        embedding_deployment=active_config.embedding_deployment,
+        chat_deployment=active_config.chat_deployment,
+        reasoning_effort=active_config.reasoning_effort,
+    )
+
+    shared_index_dir = os.path.join(output_dir, "_indexes", "_shared")
+    ensure_dir(shared_index_dir)
+    glossary_rows, glossary_stats = build_glossary_index(
+        os.path.join(output_dir, "_shared", "glossary_data.json"),
+        os.path.join(shared_index_dir, "glossary_embeddings.jsonl"),
+        client.embed_text,
+        active_config.embedding_deployment,
+        rebuild=rebuild_embeddings,
+    )
+
+    metod_summaries: dict[str, dict[str, int]] = {}
+    for metod_id, pruebas in pruebas_by_metod.items():
+        metod_index_dir = os.path.join(output_dir, "_indexes", metod_id)
+        ensure_dir(metod_index_dir)
+        profile_rows, profile_stats = build_profile_index(
+            pruebas,
+            os.path.join(metod_index_dir, "prueba_profile_embeddings.jsonl"),
+            client.embed_text,
+            active_config.embedding_deployment,
+            rebuild=rebuild_embeddings,
+        )
+        metod_summaries[metod_id] = {
+            "profiles": len(profile_rows),
+            "embeddings_created": profile_stats.created,
+            "embeddings_reused": profile_stats.reused,
+        }
+
+    return {
+        "manifests": manifests,
+        "embedding_summary": {
+            "embedding_deployment": active_config.embedding_deployment,
+            "glossary_terms": len(glossary_rows),
+            "glossary_embeddings_created": glossary_stats.created,
+            "glossary_embeddings_reused": glossary_stats.reused,
+            "metods": metod_summaries,
+        },
+    }
+
+
+def _read_admin_index(
+    index_path: str,
+    label: str,
+    expected_embedding_model: str,
+) -> list[dict[str, Any]]:
+    if not os.path.exists(index_path):
+        raise FileNotFoundError(
+            f"Missing admin {label} index: {index_path}. "
+            "Run notebooks/01_admin_build_knowledge.py first."
+        )
+
+    rows = read_jsonl(index_path)
+    unexpected_models = {
+        row.get("embedding_model")
+        for row in rows
+        if row.get("embedding_model") != expected_embedding_model
+    }
+    if unexpected_models:
+        raise ValueError(
+            f"Admin {label} index uses {sorted(unexpected_models)} but runtime uses "
+            f"'{expected_embedding_model}'. Rebuild it with the admin notebook."
+        )
+    return rows
+
+
 
 def _select_glossary_rows(
     query_text: str,
@@ -265,8 +351,6 @@ def run_observation_pipeline(
     metod_id: str,
     config: AppConfig | None = None,
     rebuild_evidence_index: bool = False,
-    run_mode: str = "full",
-    prueba_id: str | None = None,
     model_client: ModelClient | None = None,
 ) -> dict[str, Any]:
     active_config = config or load_config()
@@ -285,19 +369,37 @@ def run_observation_pipeline(
         )
 
     client = model_client or ModelClient(
-        embedding_provider=active_config.embedding_provider,
-        chat_provider=active_config.chat_provider,
         embedding_deployment=active_config.embedding_deployment,
         chat_deployment=active_config.chat_deployment,
+        reasoning_effort=active_config.reasoning_effort,
     )
 
     pruebas = load_manifest_pruebas(paths["manifest_path"])
-    if run_mode == "prueba_unica":
-        if not prueba_id:
-            raise ValueError("prueba_id is required when run_mode='prueba_unica'.")
-        pruebas = [prueba for prueba in pruebas if prueba.prueba_id == prueba_id]
-        if not pruebas:
-            raise ValueError(f"prueba_id '{prueba_id}' was not found for {clean_metod}.")
+    glossary_rows = _read_admin_index(
+        paths["glossary_index_path"],
+        "glossary",
+        active_config.embedding_deployment,
+    )
+    profile_rows = _read_admin_index(
+        paths["profile_index_path"],
+        f"{clean_metod} prueba profile",
+        active_config.embedding_deployment,
+    )
+    profiles_by_prueba = {
+        row.get("prueba_id", row.get("id")): row
+        for row in profile_rows
+        if row.get("embedding")
+    }
+    missing_profiles = [
+        prueba.prueba_id
+        for prueba in pruebas
+        if prueba.prueba_id not in profiles_by_prueba
+    ]
+    if missing_profiles:
+        raise ValueError(
+            f"Missing admin profile embeddings for {missing_profiles}. "
+            "Rebuild them with notebooks/01_admin_build_knowledge.py."
+        )
 
     evidence_rows, evidence_summary = build_evidence_index(
         clean_metod,
@@ -321,27 +423,13 @@ def run_observation_pipeline(
         source_scope="global",
         summary_prefix="global_context",
     )
-    glossary_path = os.path.join(active_config.knowledge_base_dir, "_shared", "glossary_data.json")
-    glossary_rows, glossary_stats = build_glossary_index(
-        glossary_path,
-        paths["glossary_index_path"],
-        client.embed_text,
-        active_config.embedding_deployment,
-        rebuild=False,
-    )
-    _, profile_stats = build_profile_index(
-        pruebas,
-        paths["profile_index_path"],
-        client.embed_text,
-        active_config.embedding_deployment,
-        rebuild=False,
-    )
 
     observations = []
     retrieval_debug_rows = []
     for prueba in pruebas:
-        query_text = prueba_profile_text(prueba)
-        query_embedding = client.embed_text(query_text)
+        profile_row = profiles_by_prueba[prueba.prueba_id]
+        query_text = profile_row.get("text") or prueba_profile_text(prueba)
+        query_embedding = profile_row["embedding"]
         selected_evidence_rows = retrieve_top_k(
             query_embedding,
             evidence_rows,
@@ -426,10 +514,9 @@ def run_observation_pipeline(
         "llm_generation_requests": len(pruebas),
         "top_k_global_context_per_prueba": active_config.top_k_global_context,
         "max_prompt_images_per_prueba": active_config.max_prompt_images,
-        "glossary_embeddings_created": glossary_stats.created,
-        "glossary_embeddings_reused": glossary_stats.reused,
-        "profile_embeddings_created": profile_stats.created,
-        "profile_embeddings_reused": profile_stats.reused,
+        "glossary_embeddings_loaded": len(glossary_rows),
+        "profile_embeddings_loaded": len(profile_rows),
+        "admin_query_embeddings_reused": len(pruebas),
     }
     output_paths = save_run_outputs(
         active_config.outputs_base_dir,

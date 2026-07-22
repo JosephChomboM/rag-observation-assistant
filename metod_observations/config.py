@@ -14,10 +14,9 @@ class AppConfig:
     inputs_base_dir: str
     indexes_base_dir: str
     outputs_base_dir: str
-    embedding_provider: str
-    chat_provider: str
     embedding_deployment: str
     chat_deployment: str
+    reasoning_effort: str = "high"
     top_k_evidence: int = 8
     top_k_global_context: int = 4
     top_k_glossary: int = 5
@@ -26,19 +25,12 @@ class AppConfig:
     chunk_overlap: int = 200
 
 
-def load_dotenv_if_exists(path: str = ".env") -> None:
-    if not os.path.exists(path):
-        return
-    with open(path, "r", encoding="utf-8") as file:
-        for raw_line in file:
-            line = raw_line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            key = key.strip()
-            value = value.strip().strip('"').strip("'")
-            if key and key not in os.environ:
-                os.environ[key] = value
+def configure_runtime(env_path: str = ".env") -> None:
+    import truststore
+    from dotenv import load_dotenv
+
+    load_dotenv(env_path, override=True)
+    truststore.inject_into_ssl()
 
 
 def first_env(names: list[str], default: str) -> str:
@@ -49,32 +41,22 @@ def first_env(names: list[str], default: str) -> str:
     return default
 
 
-def resolve_embedding_deployment(provider: str) -> str:
-    if provider == "databricks":
-        return first_env(
-            ["SOFTIA_EMBEDDING_ENDPOINT", "DEPLOYMENT_EMB_DATABRICKS"],
-            "databricks-qwen3-embedding-0-6b",
-        )
+def resolve_embedding_deployment() -> str:
     return first_env(
-        ["SOFTIA_EMBEDDING_ENDPOINT", "AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "DEPLOYMENT_EMB_SMALL"],
-        "text-embedding-3-small",
+        ["AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "DEPLOYMENT_EMB_SMALL"],
+        "",
     )
 
 
-def resolve_chat_deployment(provider: str) -> str:
-    if provider == "databricks":
-        return first_env(
-            ["SOFTIA_CHAT_ENDPOINT", "MODEL_NAME_DATABRICKS", "DEPLOYMENT_CHAT_DATABRICKS"],
-            "databricks-claude-haiku-4-5",
-        )
+def resolve_chat_deployment() -> str:
     return first_env(
-        ["SOFTIA_CHAT_ENDPOINT", "AZURE_OPENAI_CHAT_DEPLOYMENT", "DEPLOYMENT_AZURE", "DEPLOYMENT_GPT4"],
-        "gpt-4o-mini",
+        ["AZURE_OPENAI_CHAT_DEPLOYMENT", "DEPLOYMENT_GPT54", "DEPLOYMENT_AZURE"],
+        "",
     )
 
 
 def load_config() -> AppConfig:
-    load_dotenv_if_exists()
+    configure_runtime()
     user_email = os.getenv("SOFTIA_USER_EMAIL", "josephchombo@company.com").strip()
     workspace_base = os.getenv(
         "SOFTIA_WORKSPACE_BASE_DIR",
@@ -84,8 +66,7 @@ def load_config() -> AppConfig:
         "SOFTIA_KNOWLEDGE_BASE_DIR",
         "/dbfs/FileStore/softia_mvp/knowledge",
     ).strip()
-    embedding_provider = os.getenv("SOFTIA_EMBEDDING_PROVIDER", "azure").strip().lower()
-    chat_provider = os.getenv("SOFTIA_CHAT_PROVIDER", embedding_provider).strip().lower()
+    reasoning_effort = os.getenv("SOFTIA_REASONING_EFFORT", "high").strip().lower()
 
     return AppConfig(
         user_email=user_email,
@@ -94,10 +75,9 @@ def load_config() -> AppConfig:
         inputs_base_dir=os.path.join(workspace_base, "inputs"),
         indexes_base_dir=os.path.join(workspace_base, "indexes"),
         outputs_base_dir=os.path.join(workspace_base, "outputs", "generated_observations"),
-        embedding_provider=embedding_provider,
-        chat_provider=chat_provider,
-        embedding_deployment=resolve_embedding_deployment(embedding_provider),
-        chat_deployment=resolve_chat_deployment(chat_provider),
+        embedding_deployment=resolve_embedding_deployment(),
+        chat_deployment=resolve_chat_deployment(),
+        reasoning_effort=reasoning_effort,
         top_k_evidence=int(os.getenv("SOFTIA_TOP_K_EVIDENCE", "8")),
         top_k_global_context=int(os.getenv("SOFTIA_TOP_K_GLOBAL_CONTEXT", "4")),
         top_k_glossary=int(os.getenv("SOFTIA_TOP_K_GLOSSARY", "5")),
@@ -117,18 +97,22 @@ def metod_paths(config: AppConfig, metod_id: str) -> dict[str, str]:
         "global_input_dir": os.path.join(config.inputs_base_dir, "_global"),
         "index_dir": os.path.join(config.indexes_base_dir, clean_metod),
         "global_index_dir": os.path.join(config.indexes_base_dir, "_global"),
+        "knowledge_index_dir": os.path.join(config.knowledge_base_dir, "_indexes", clean_metod),
+        "shared_knowledge_index_dir": os.path.join(config.knowledge_base_dir, "_indexes", "_shared"),
         "evidence_index_path": os.path.join(
             config.indexes_base_dir,
             clean_metod,
             "evidence_chunks_embeddings.jsonl",
         ),
         "glossary_index_path": os.path.join(
-            config.indexes_base_dir,
-            clean_metod,
+            config.knowledge_base_dir,
+            "_indexes",
+            "_shared",
             "glossary_embeddings.jsonl",
         ),
         "profile_index_path": os.path.join(
-            config.indexes_base_dir,
+            config.knowledge_base_dir,
+            "_indexes",
             clean_metod,
             "prueba_profile_embeddings.jsonl",
         ),

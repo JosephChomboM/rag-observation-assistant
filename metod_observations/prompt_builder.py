@@ -62,28 +62,12 @@ Reglas obligatorias:
 - Si no hay sustento suficiente, hay_observacion debe ser false y observacion debe ser "".
 - La criticidad, si existe, solo puede ser una de: {CRITICALITY_ENUM_TEXT}.
 - Si hay_observacion es false, criticidad debe ser null.
-- Responde solo JSON valido, sin markdown.
-
-Schema requerido:
-{{
-  "prueba_id": "{prueba.prueba_id}",
-  "nombre_prueba": "{prueba.nombre_prueba}",
-  "hay_observacion": true,
-  "criticidad": "Critico|Relevante|Moderado|Baja|Potencial|null",
-  "observacion": "texto claro o vacio si no hay observacion",
-  "sustento": "sustento basado en evidencia o vacio",
-  "controles_evaluados": {json.dumps(control_ids, ensure_ascii=False)},
-  "controles_que_originan_observacion": [],
-  "evidencias_usadas": [
-    {{"archivo": "nombre.ext", "chunk_id": "id", "score": 0.0}}
-  ],
-  "informacion_faltante": []
-}}
 
 METADATA:
 METOD: {prueba.metod_id}
 PRUEBA_ID: {prueba.prueba_id}
 NOMBRE_PRUEBA: {prueba.nombre_prueba}
+CONTROLES_ESPERADOS: {json.dumps(control_ids, ensure_ascii=False)}
 
 ESPECIFICACION DE LA PRUEBA:
 {prueba_markdown}

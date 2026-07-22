@@ -1,6 +1,5 @@
-# Modelos y proveedores
+# Azure OpenAI
 openai
-mlflow
 
 # Configuracion local y certificados SSL
 python-dotenv
