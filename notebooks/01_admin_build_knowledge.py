@@ -1,5 +1,5 @@
 # Databricks notebook source
-# MAGIC %pip install --upgrade openai python-dotenv truststore openpyxl
+# MAGIC %pip install --upgrade openai pydantic python-dotenv truststore openpyxl
 
 # COMMAND ----------
 

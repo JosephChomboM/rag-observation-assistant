@@ -150,7 +150,7 @@ Perfil admin de cada prueba ---------+--> cosine similarity local
                                      |
                                      v
 Azure OpenAI Responses API
-GPT-5.4 + reasoning high + imagenes base64 + JSON Schema
+GPT-5.4 + reasoning high + imagenes base64 + Pydantic Structured Outputs
                                      |
                                      v
 JSON + Markdown + retrieval debug por ejecucion
@@ -165,10 +165,10 @@ El flujo productivo actual utiliza solamente **Azure OpenAI**.
 - Generacion: deployment GPT-5.4 configurado en `.env`.
 - Valor comunicado para el deployment GPT-5.4: `OAIXXX05`.
 - Razonamiento: `reasoning={"effort": "high"}`.
-- API: `OpenAI(...).responses.create(...)` contra Azure OpenAI v1.
+- API: `OpenAI(...).responses.parse(...)` contra Azure OpenAI v1.
 - Multimodalidad: un mismo mensaje contiene `input_text` y cero o mas `input_image`.
 - Imagenes: se envian como data URL base64.
-- Salida: Structured Outputs mediante un JSON Schema estricto.
+- Salida: Structured Outputs mediante `text_format=ObservationPayload` de Pydantic.
 - Embeddings: deployment Azure configurado por `DEPLOYMENT_EMB_SMALL` o `AZURE_OPENAI_EMBEDDING_DEPLOYMENT`.
 
 Claude y Databricks Model Serving ya no forman parte del flujo productivo. No reintroducir `mlflow.deployments`, providers seleccionables ni widgets de endpoints en los notebooks productivos.
@@ -334,7 +334,7 @@ Proceso:
 9. Recupera evidencia, contexto global y glosario.
 10. Convierte como maximo `SOFTIA_MAX_PROMPT_IMAGES` imagenes recuperadas a base64.
 11. Construye el prompt con el Markdown completo de la prueba.
-12. Ejecuta una llamada `responses.create` por prueba.
+12. Ejecuta una llamada `responses.parse` por prueba.
 13. Valida la criticidad y los IDs de controles devueltos.
 14. Guarda JSON, Markdown y retrieval debug.
 
@@ -372,7 +372,7 @@ Cada request contiene:
 - nombres de imagenes adjuntas;
 - data URLs base64 como `input_image`.
 
-El JSON Schema exige:
+El modelo Pydantic `ObservationPayload` exige:
 
 ```json
 {
@@ -395,11 +395,10 @@ El JSON Schema exige:
 }
 ```
 
-Ademas del schema de la API, `validate_observation_payload()` aplica validacion defensiva:
+Pydantic rechaza criticidades fuera del enum. Despues, `validate_observation_payload()` aplica las reglas de negocio restantes:
 
 - fuerza la criticidad a `null` cuando no hay observacion;
 - limpia el texto de observacion cuando no hay hallazgo;
-- rechaza criticidades fuera del enum;
 - elimina IDs de controles que no pertenecen a la prueba;
 - completa `controles_evaluados` con todos los controles si el modelo no los entrega.
 
@@ -408,7 +407,7 @@ Ademas del schema de la API, `validate_observation_payload()` aplica validacion 
 | Archivo | Responsabilidad |
 |---|---|
 | `metod_observations/config.py` | Configuracion, `.env`, `truststore` y resolucion de rutas. |
-| `metod_observations/schemas.py` | Dataclasses, enum de criticidad y JSON Schema. |
+| `metod_observations/schemas.py` | Dataclasses y modelos Pydantic para Structured Outputs. |
 | `metod_observations/excel_loader.py` | Lectura, validacion y normalizacion del Excel. |
 | `metod_observations/knowledge_builder.py` | Markdown, manifest y texto de perfil de pruebas. |
 | `metod_observations/parsers.py` | Extraccion de texto y registro de imagenes. |
@@ -466,7 +465,7 @@ Para cambios nuevos, empezar por `metod_observations/` y los dos notebooks numer
 - GPT-5.4 configurable por `.env`;
 - razonamiento `high`;
 - imagenes reales adjuntadas como base64;
-- Structured Outputs con JSON Schema;
+- Structured Outputs con Pydantic y `responses.parse`;
 - JSON, Markdown y retrieval debug;
 - notebook del usuario reducido a dos widgets.
 
@@ -496,7 +495,7 @@ Prioridad alta:
 
 1. Ejecutar el notebook admin con el Excel real y revisar manifests, Markdown e indices generados.
 2. Ejecutar una prueba end-to-end pequena en Databricks con un `METOD` y evidencia conocida.
-3. Confirmar que el deployment GPT-5.4 acepta Responses API, `reasoning=high`, imagenes y el JSON Schema actual.
+3. Confirmar que el deployment GPT-5.4 acepta Responses API, `reasoning={"effort": "high"}`, imagenes y el modelo Pydantic actual.
 4. Validar programaticamente que `evidencias_usadas` solo contenga chunks realmente recuperados. Hoy el schema valida la forma, pero no cruza esos IDs contra el conjunto enviado al modelo.
 5. Validar tambien la criticidad proveniente del Excel. Actualmente el enum se aplica a la salida del modelo, pero el loader no rechaza valores administrativos fuera del enum.
 
@@ -571,4 +570,3 @@ El MVP puede considerarse operativo cuando:
 8. las imagenes relevantes llegan efectivamente al request multimodal;
 9. el debug permite auditar retrieval y archivos utilizados;
 10. costos y latencia son aceptables para el numero real de pruebas.
-

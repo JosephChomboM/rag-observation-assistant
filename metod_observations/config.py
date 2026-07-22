@@ -3,9 +3,6 @@
 import os
 from dataclasses import dataclass
 
-from .schemas import VALID_CRITICALITIES
-
-
 @dataclass(frozen=True)
 class AppConfig:
     user_email: str
@@ -122,6 +119,3 @@ def metod_paths(config: AppConfig, metod_id: str) -> dict[str, str]:
             "global_context_embeddings.jsonl",
         ),
     }
-
-
-CRITICALITY_ENUM_TEXT = ", ".join(sorted(VALID_CRITICALITIES))

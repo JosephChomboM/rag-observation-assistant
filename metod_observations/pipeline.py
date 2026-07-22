@@ -19,7 +19,7 @@ from .knowledge_builder import (
 from .observation_generator import generate_observation
 from .outputs import save_run_outputs, utc_run_id
 from .parsers import list_evidence_files, parse_evidence_files
-from .prompt_builder import build_generation_prompt
+from .prompt_builder import build_generation_input
 from .retrieval import compact_retrieved_evidence, retrieve_top_k
 from .schemas import ControlSpec, PruebaSpec
 
@@ -453,7 +453,7 @@ def run_observation_pipeline(
             active_config.max_prompt_images,
         )
         prueba_markdown = read_prueba_markdown(paths["knowledge_dir"], prueba)
-        prompt = build_generation_prompt(
+        input_text = build_generation_input(
             prueba,
             prueba_markdown,
             retrieved_evidence,
@@ -463,9 +463,9 @@ def run_observation_pipeline(
         )
         observations.append(
             generate_observation(
-                prompt,
+                input_text,
                 prueba,
-                client.chat_json,
+                client.parse_response,
                 image_data_urls=image_data_urls,
             )
         )
@@ -533,5 +533,3 @@ def run_observation_pipeline(
         "usage_summary": usage_summary,
         "observations": [observation.to_dict() for observation in observations],
     }
-
-

@@ -1,5 +1,5 @@
 ﻿# Databricks notebook source
-# MAGIC %pip install --upgrade openai python-dotenv truststore openpyxl python-docx beautifulsoup4 pypdf
+# MAGIC %pip install --upgrade openai pydantic python-dotenv truststore openpyxl python-docx beautifulsoup4 pypdf
 
 # COMMAND ----------
 
@@ -99,4 +99,3 @@ try:
     )
 except NameError:
     print(json.dumps(result["observations"], ensure_ascii=False, indent=2))
-

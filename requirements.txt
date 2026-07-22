@@ -1,5 +1,6 @@
 # Azure OpenAI
 openai
+pydantic>=2
 
 # Configuracion local y certificados SSL
 python-dotenv

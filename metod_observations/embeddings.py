@@ -5,6 +5,8 @@ import os
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from pydantic import BaseModel
+
 
 @dataclass(frozen=True)
 class EmbeddingStats:
@@ -61,22 +63,20 @@ class ModelClient:
         )
         return response.data[0].embedding
 
-    def chat_json(
+    def parse_response(
         self,
-        prompt: str,
+        input_text: str,
+        instructions: str,
+        text_format: type[BaseModel],
         image_data_urls: list[str] | None = None,
-        response_schema: dict[str, Any] | None = None,
         max_output_tokens: int = 1800,
-    ) -> str:
+    ) -> BaseModel:
         if not self.chat_deployment:
             raise ValueError(
                 "Missing chat deployment. Set AZURE_OPENAI_CHAT_DEPLOYMENT, "
                 "DEPLOYMENT_GPT54 or DEPLOYMENT_AZURE in .env."
             )
-        if response_schema is None:
-            raise ValueError("response_schema is required for structured output.")
-
-        content: list[dict[str, Any]] = [{"type": "input_text", "text": prompt}]
+        content: list[dict[str, Any]] = [{"type": "input_text", "text": input_text}]
         content.extend(
             {
                 "type": "input_image",
@@ -86,23 +86,18 @@ class ModelClient:
             for data_url in image_data_urls or []
         )
 
-        response = self._client().responses.create(
+        response = self._client().responses.parse(
             model=self.chat_deployment,
-            instructions="Eres un validador metodologico. Sigue el esquema de salida.",
+            instructions=instructions,
             input=[{"role": "user", "content": content}],
             reasoning={"effort": self.reasoning_effort},
-            text={
-                "format": {
-                    "type": "json_schema",
-                    "name": "observation_result",
-                    "strict": True,
-                    "schema": response_schema,
-                }
-            },
+            text_format=text_format,
             max_output_tokens=max_output_tokens,
             store=False,
         )
-        return response.output_text
+        if response.output_parsed is None:
+            raise ValueError("Model did not return a structured response.")
+        return response.output_parsed
 
 
 def embed_rows_with_cache(
@@ -144,4 +139,3 @@ def embed_rows_with_cache(
         )
         created += 1
     return output, EmbeddingStats(created=created, reused=reused, total=len(output))
-
