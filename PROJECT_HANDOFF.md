@@ -134,7 +134,7 @@ Esto evita volver a generar un embedding de consulta por cada prueba en cada eje
 Excel maestro administrado
         |
         v
-notebooks/01_admin_build_knowledge.py
+01_admin_build_knowledge.py
         |
         +--> Markdown por prueba
         +--> manifest.json por METOD
@@ -261,7 +261,8 @@ La carpeta del usuario no se configura en `.env` ni en `config.py`. Se indica ob
 ### Zona de cada usuario
 
 ```text
-/Workspace/Users/<usuario>/softia_mvp/
+/Workspace/Users/<usuario>/gestor_observaciones/
+  02_generate_observations_by_prueba.py
   inputs/
     _global/
       configuracion_variables.sas
@@ -280,11 +281,20 @@ La carpeta del usuario no se configura en `.env` ni en `config.py`. Se indica ob
       retrieval_debug_BBDD1_run_YYYYMMDD_HHMMSS.jsonl
 ```
 
-Los notebooks buscan automaticamente la raiz del repositorio desde su ubicacion o directorio de trabajo. El proyecto puede clonarse en cualquier ruta sin configurar una variable para importar `metod_observations`.
+El backend administrado puede usar cualquier nombre de carpeta y no se copia a los usuarios:
+
+```text
+/Workspace/Users/<admin>/<cualquier_nombre>/
+  .env
+  metod_observations/
+  01_admin_build_knowledge.py
+```
+
+El notebook 01 encuentra `metod_observations` a su lado. El notebook 02 puede residir solo dentro de `gestor_observaciones/`; el administrador deja configurada en `BACKEND_PROJECT_DIR` la ruta de la carpeta administrativa anterior.
 
 ## 9. Flujo admin
 
-Entrada principal: `notebooks/01_admin_build_knowledge.py`.
+Entrada principal: `01_admin_build_knowledge.py`.
 
 Widgets del admin:
 
@@ -319,33 +329,36 @@ Ese archivo no esta versionado en este repositorio y debe transferirse por separ
 
 ## 10. Flujo usuario
 
-Entrada principal: `notebooks/02_generate_observations_by_prueba.py`.
+Entrada principal: `gestor_observaciones/02_generate_observations_by_prueba.py`.
 
 Widgets visibles:
 
 - `metod_id`, por defecto `BBDD1`;
 - `user_base_dir`, carpeta raiz del usuario.
 
+La constante `BACKEND_PROJECT_DIR` se configura una sola vez por el administrador antes de distribuir el notebook. No se muestra como widget al usuario.
+
 El notebook deriva todas las demas rutas. No existe `run_mode` ni selector de prueba individual. Siempre procesa todas las pruebas del `METOD` seleccionado.
 
 Proceso:
 
-1. Carga `.env` e inyecta `truststore`.
-2. Verifica que exista el manifest administrado.
-3. Verifica que existan los indices admin de glosario y perfiles.
-4. Verifica que el deployment que genero esos indices coincida con el deployment actual.
-5. Descubre y parsea evidencia recursivamente en `inputs/<METOD>/`.
-6. Descubre y parsea contexto recursivamente en `inputs/_global/`.
-7. Genera chunks y reutiliza embeddings por hash cuando no hubo cambios.
-8. Para cada prueba, reutiliza el embedding de su perfil como query.
-9. Recupera evidencia, contexto global y glosario.
-10. Selecciona archivos fuente relevantes de `inputs/<METOD>/` y `inputs/_global/` y adjunta como maximo `SOFTIA_MAX_PROMPT_FILES`.
-11. Sube los archivos seleccionados con Files API y `purpose="assistants"`; conserva los formatos originales y cambia solamente `.sas` a `.txt`.
-12. Convierte como maximo `SOFTIA_MAX_PROMPT_IMAGES` imagenes recuperadas a base64.
-13. Construye el input con el Markdown completo de la prueba.
-14. Ejecuta una llamada `responses.parse` por prueba.
-15. Valida la criticidad y los IDs de controles devueltos.
-16. Guarda JSON, Markdown y retrieval debug.
+1. Valida que `BACKEND_PROJECT_DIR` contenga `metod_observations/`.
+2. Importa el backend y carga el `.env` desde esa carpeta administrada.
+3. Verifica que exista el manifest administrado.
+4. Verifica que existan los indices admin de glosario y perfiles.
+5. Verifica que el deployment que genero esos indices coincida con el deployment actual.
+6. Descubre y parsea evidencia recursivamente en `inputs/<METOD>/`.
+7. Descubre y parsea contexto recursivamente en `inputs/_global/`.
+8. Genera chunks y reutiliza embeddings por hash cuando no hubo cambios.
+9. Para cada prueba, reutiliza el embedding de su perfil como query.
+10. Recupera evidencia, contexto global y glosario.
+11. Selecciona archivos fuente relevantes de `inputs/<METOD>/` y `inputs/_global/` y adjunta como maximo `SOFTIA_MAX_PROMPT_FILES`.
+12. Sube los archivos seleccionados con Files API y `purpose="assistants"`; conserva los formatos originales y cambia solamente `.sas` a `.txt`.
+13. Convierte como maximo `SOFTIA_MAX_PROMPT_IMAGES` imagenes recuperadas a base64.
+14. Construye el input con el Markdown completo de la prueba.
+15. Ejecuta una llamada `responses.parse` por prueba.
+16. Valida la criticidad y los IDs de controles devueltos.
+17. Guarda JSON, Markdown y retrieval debug.
 
 ## 11. Evidencias soportadas
 
@@ -434,8 +447,8 @@ Pydantic rechaza criticidades fuera del enum. Despues, `validate_observation_pay
 | `metod_observations/observation_generator.py` | Parseo y validacion defensiva de la respuesta. |
 | `metod_observations/outputs.py` | Escritura de JSON, Markdown y JSONL debug. |
 | `metod_observations/pipeline.py` | Orquestacion admin y usuario. |
-| `notebooks/01_admin_build_knowledge.py` | Interfaz Databricks del admin. |
-| `notebooks/02_generate_observations_by_prueba.py` | Interfaz Databricks del usuario final. |
+| `01_admin_build_knowledge.py` | Interfaz Databricks del admin, junto al backend. |
+| `gestor_observaciones/02_generate_observations_by_prueba.py` | Interfaz Databricks distribuible al usuario final. |
 
 ## 14. Uso de POO
 
@@ -484,7 +497,7 @@ Para cambios nuevos, empezar por `metod_observations/` y los dos notebooks numer
 - imagenes reales adjuntadas como base64;
 - Structured Outputs con Pydantic y `responses.parse`;
 - JSON, Markdown y retrieval debug;
-- notebook del usuario reducido a dos widgets.
+- notebook del usuario desacoplado del backend y reducido a dos widgets.
 
 ### Validado hasta ahora
 
@@ -541,17 +554,17 @@ Detalles a vigilar:
 2. Copiar por separado el Excel maestro y cualquier evidencia que no este en Git.
 3. Crear `.env` desde `.env.example` con credenciales y deployments reales.
 4. No copiar ningun secreto dentro de este Markdown ni al repositorio.
-5. Subir o sincronizar el codigo en Databricks Workspace Files.
-6. Ejecutar primero `notebooks/01_admin_build_knowledge.py`.
+5. Subir `metod_observations/`, `.env` y el notebook 01 a una carpeta administrativa con cualquier nombre.
+6. Ejecutar primero `01_admin_build_knowledge.py` desde esa carpeta.
 7. Revisar en FileStore:
    - Markdown por prueba;
    - `manifest.json`;
    - embeddings de perfiles;
    - embeddings del glosario.
-8. Crear para un usuario:
+8. Crear para cada usuario una carpeta `gestor_observaciones/` que contenga solamente el notebook 02 y sus datos:
     - `inputs/<METOD>/`;
     - `inputs/_global/` si aplica.
-9. Ejecutar `notebooks/02_generate_observations_by_prueba.py`.
+9. Antes de distribuir el notebook, configurar `BACKEND_PROJECT_DIR` con la ruta de la carpeta administrativa; luego ejecutar `02_generate_observations_by_prueba.py`.
 10. Revisar el JSON final, el Markdown y especialmente `retrieval_debug_*.jsonl`.
 11. Antes de ampliar funcionalidad, resolver los pendientes de prioridad alta.
 
@@ -560,7 +573,7 @@ Detalles a vigilar:
 - Leer primero este archivo y despues inspeccionar el checkout actual.
 - Tratar el codigo como la fuente de verdad si difiere de este documento.
 - Mantener el proyecto ejecutable en Databricks.
-- Mantener el notebook del usuario simple: solamente carpeta y `METOD`.
+- Mantener el notebook del usuario simple: ruta del backend fijada por el administrador y widgets únicamente para la carpeta del usuario y `METOD`.
 - Mantener configuracion tecnica y modelos bajo control del admin.
 - No reintroducir Claude ni Databricks Model Serving en produccion.
 - No convertir las reglas del Excel en un RAG innecesario.

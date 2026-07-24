@@ -276,7 +276,7 @@ def _read_admin_index(
     if not os.path.exists(index_path):
         raise FileNotFoundError(
             f"Missing admin {label} index: {index_path}. "
-            "Run notebooks/01_admin_build_knowledge.py first."
+            "Run 01_admin_build_knowledge.py first."
         )
 
     rows = read_jsonl(index_path)
@@ -458,7 +458,7 @@ def run_observation_pipeline(
     ):
         raise ValueError(
             "Missing user workspace paths. Set user_base_dir in "
-            "notebooks/02_generate_observations_by_prueba.py."
+            "gestor_observaciones/02_generate_observations_by_prueba.py."
         )
     clean_metod = metod_id.strip().upper()
     paths = metod_paths(active_config, clean_metod)
@@ -504,7 +504,7 @@ def run_observation_pipeline(
     if missing_profiles:
         raise ValueError(
             f"Missing admin profile embeddings for {missing_profiles}. "
-            "Rebuild them with notebooks/01_admin_build_knowledge.py."
+            "Rebuild them with 01_admin_build_knowledge.py."
         )
 
     evidence_rows, evidence_summary = build_evidence_index(

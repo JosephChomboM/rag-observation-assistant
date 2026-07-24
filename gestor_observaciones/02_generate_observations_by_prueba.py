@@ -6,7 +6,10 @@
 """
 User notebook: generate one consolidated observation per prueba.
 
-The user only selects a METOD and their workspace folder. The pipeline reads:
+The administrator configures the shared backend path once in this notebook.
+The user selects a METOD and their workspace folder.
+The pipeline reads:
+- shared backend code from <BACKEND_PROJECT_DIR>/metod_observations/
 - METOD evidence from <user_base_dir>/inputs/<METOD>/
 - shared user context from <user_base_dir>/inputs/_global/
 - admin knowledge and stable embeddings from SOFTIA_KNOWLEDGE_BASE_DIR
@@ -25,21 +28,9 @@ from pathlib import Path
 import truststore
 from dotenv import load_dotenv
 
-
-def find_repo_root() -> str:
-    starts = [Path.cwd()]
-    if "__file__" in globals():
-        starts.append(Path(__file__).resolve().parent)
-    for start in starts:
-        for candidate in (start, *start.parents):
-            if (candidate / "metod_observations").is_dir():
-                return str(candidate)
-    raise FileNotFoundError("No se encontro la raiz del repositorio.")
-
-
-repo_root = find_repo_root()
-load_dotenv(os.path.join(repo_root, ".env"), override=True)
-truststore.inject_into_ssl()
+# Configure this path before distributing the notebook to users.
+# The folder must contain metod_observations/ and the .env file.
+BACKEND_PROJECT_DIR = "/Workspace/Users/<admin>/<cualquier_nombre>"
 
 try:
     dbutils.widgets.text("metod_id", "BBDD1", "METOD")
@@ -59,15 +50,25 @@ def get_widget(name: str, default: str = "") -> str:
         return os.getenv(name.upper(), default).strip()
 
 
-if repo_root not in sys.path:
-    sys.path.insert(0, repo_root)
+backend_project_dir = BACKEND_PROJECT_DIR.strip()
+if not (Path(backend_project_dir) / "metod_observations").is_dir():
+    raise FileNotFoundError(
+        "Configura BACKEND_PROJECT_DIR con la carpeta que contiene "
+        f"metod_observations. Ruta actual: {backend_project_dir}"
+    )
+
+load_dotenv(os.path.join(backend_project_dir, ".env"), override=True)
+truststore.inject_into_ssl()
+
+if backend_project_dir not in sys.path:
+    sys.path.insert(0, backend_project_dir)
 
 from metod_observations.config import load_config  # noqa: E402
 from metod_observations.pipeline import run_observation_pipeline  # noqa: E402
 
 # COMMAND ----------
 
-base_config = load_config(os.path.join(repo_root, ".env"))
+base_config = load_config(os.path.join(backend_project_dir, ".env"))
 user_base_dir = get_widget("user_base_dir")
 metod_id = get_widget("metod_id", "BBDD1").upper()
 
