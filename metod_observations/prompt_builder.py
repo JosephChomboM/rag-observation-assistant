@@ -11,6 +11,7 @@ def build_generation_input(
     evidence: list[RetrievedChunk],
     global_context: list[RetrievedChunk],
     glossary_rows: list[dict],
+    attached_files: list[dict] | None = None,
     attached_image_files: list[str] | None = None,
 ) -> str:
     evidence_payload = [
@@ -44,6 +45,7 @@ def build_generation_input(
         for row in glossary_rows
     ]
     control_ids = [control.control_id for control in prueba.controls]
+    attached_files_text = attached_files or []
     attached_images_text = attached_image_files or []
 
     return f"""
@@ -64,6 +66,9 @@ GLOSARIO RELEVANTE:
 
 CONTEXTO GLOBAL COMPARTIDO PARA TODOS LOS METOD:
 {json.dumps(global_context_payload, ensure_ascii=False, indent=2)}
+
+ARCHIVOS ADJUNTOS AL MENSAJE:
+{json.dumps(attached_files_text, ensure_ascii=False, indent=2)}
 
 IMAGENES ADJUNTAS AL MENSAJE:
 {json.dumps(attached_images_text, ensure_ascii=False, indent=2)}

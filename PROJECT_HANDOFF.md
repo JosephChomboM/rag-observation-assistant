@@ -74,6 +74,8 @@ El admin es la unica persona que modifica:
 - los embeddings estables del glosario;
 - deployments, razonamiento, retrieval, chunking y limites de imagenes en `.env`.
 
+Cada `manifest.json` es el inventario normalizado de un `METOD` generado desde el Excel maestro. Contiene las pruebas, controles, IDs, archivo fuente, Markdown asociado y texto de perfil. El runtime lo usa para saber exactamente que pruebas debe procesar sin volver a leer el Excel administrativo.
+
 ### Usuario final
 
 El usuario solamente:
@@ -150,7 +152,7 @@ Perfil admin de cada prueba ---------+--> cosine similarity local
                                      |
                                      v
 Azure OpenAI Responses API
-GPT-5.4 + reasoning high + imagenes base64 + Pydantic Structured Outputs
+GPT-5.4 + reasoning high + file_ids/imagenes base64 + Pydantic Structured Outputs
                                      |
                                      v
 JSON + Markdown + retrieval debug por ejecucion
@@ -166,7 +168,9 @@ El flujo productivo actual utiliza solamente **Azure OpenAI**.
 - Valor comunicado para el deployment GPT-5.4: `OAIXXX05`.
 - Razonamiento: `reasoning={"effort": "high"}`.
 - API: `OpenAI(...).responses.parse(...)` contra Azure OpenAI v1.
-- Multimodalidad: un mismo mensaje contiene `input_text` y cero o mas `input_image`.
+- Multimodalidad: un mismo mensaje contiene `input_text`, cero o mas `input_file` y cero o mas `input_image`.
+- Archivos: PDF, DOCX, XLSX, CSV, HTML y codigo se suben en su formato original. Solo SAS se sube con extension `.txt`.
+- Transporte de archivos: `client.files.create(..., purpose="assistants")` y luego `input_file` con `file_id`. Cada archivo se sube una vez por ejecucion y su ID se reutiliza entre pruebas.
 - Imagenes: se envian como data URL base64.
 - Salida: Structured Outputs mediante `text_format=ObservationPayload` de Pydantic.
 - Embeddings: deployment Azure configurado por `DEPLOYMENT_EMB_SMALL` o `AZURE_OPENAI_EMBEDDING_DEPLOYMENT`.
@@ -188,14 +192,13 @@ AZURE_OPENAI_ENDPOINT=https://<recurso>.openai.azure.com/
 DEPLOYMENT_AZURE=OAIXXX05
 DEPLOYMENT_EMB_SMALL=<deployment-de-embeddings>
 
-SOFTIA_KNOWLEDGE_BASE_DIR=/dbfs/FileStore/softia_mvp/knowledge
-SOFTIA_WORKSPACE_BASE_DIR=/Workspace/Users/<usuario>/softia_mvp
-SOFTIA_CODE_PATH=/Workspace/Users/<admin>/gestor_observaciones
+SOFTIA_KNOWLEDGE_BASE_DIR=/dbfs/FileStore/gestor_obs/knowledge
 
 SOFTIA_REASONING_EFFORT=high
 SOFTIA_TOP_K_EVIDENCE=8
 SOFTIA_TOP_K_GLOBAL_CONTEXT=4
 SOFTIA_TOP_K_GLOSSARY=5
+SOFTIA_MAX_PROMPT_FILES=4
 SOFTIA_MAX_PROMPT_IMAGES=2
 SOFTIA_CHUNK_SIZE=1800
 SOFTIA_CHUNK_OVERLAP=200
@@ -211,7 +214,8 @@ Compatibilidad de nombres:
 Los notebooks y `load_config()` ejecutan:
 
 ```python
-load_dotenv(".env", override=True)
+repo_root = find_repo_root()
+load_dotenv(os.path.join(repo_root, ".env"), override=True)
 truststore.inject_into_ssl()
 ```
 
@@ -225,6 +229,7 @@ truststore.inject_into_ssl()
 | `SOFTIA_TOP_K_EVIDENCE` | Cantidad maxima de chunks de evidencia enviados por prueba. Mas alto aumenta contexto y costo, y puede agregar ruido. |
 | `SOFTIA_TOP_K_GLOBAL_CONTEXT` | Cantidad de chunks globales enviados por prueba. |
 | `SOFTIA_TOP_K_GLOSSARY` | Cantidad maxima de terminos recuperados. |
+| `SOFTIA_MAX_PROMPT_FILES` | Cantidad maxima de archivos relevantes adjuntados como `input_file` por prueba. |
 | `SOFTIA_MAX_PROMPT_IMAGES` | Cantidad maxima de imagenes reales adjuntadas por prueba. |
 | `SOFTIA_CHUNK_SIZE` | Tamano de cada chunk en caracteres. |
 | `SOFTIA_CHUNK_OVERLAP` | Solapamiento en caracteres entre chunks consecutivos. |
@@ -234,7 +239,7 @@ truststore.inject_into_ssl()
 ### Zona administrada en FileStore
 
 ```text
-/dbfs/FileStore/softia_mvp/knowledge/
+/dbfs/FileStore/gestor_obs/knowledge/
   _shared/
     glossary_data.json
   _indexes/
@@ -250,6 +255,8 @@ truststore.inject_into_ssl()
 ```
 
 Los embeddings estables pertenecen a FileStore porque son comunes a todos los usuarios y solo cambian cuando cambia el Excel, el glosario o el deployment de embeddings.
+
+La carpeta del usuario no se configura en `.env` ni en `config.py`. Se indica obligatoriamente mediante el widget `user_base_dir` del notebook 02.
 
 ### Zona de cada usuario
 
@@ -273,7 +280,7 @@ Los embeddings estables pertenecen a FileStore porque son comunes a todos los us
       retrieval_debug_BBDD1_run_YYYYMMDD_HHMMSS.jsonl
 ```
 
-El notebook del usuario puede estar en otra carpeta. El paquete compartido debe seguir siendo importable mediante `SOFTIA_CODE_PATH`.
+Los notebooks buscan automaticamente la raiz del repositorio desde su ubicacion o directorio de trabajo. El proyecto puede clonarse en cualquier ruta sin configurar una variable para importar `metod_observations`.
 
 ## 9. Flujo admin
 
@@ -332,11 +339,13 @@ Proceso:
 7. Genera chunks y reutiliza embeddings por hash cuando no hubo cambios.
 8. Para cada prueba, reutiliza el embedding de su perfil como query.
 9. Recupera evidencia, contexto global y glosario.
-10. Convierte como maximo `SOFTIA_MAX_PROMPT_IMAGES` imagenes recuperadas a base64.
-11. Construye el prompt con el Markdown completo de la prueba.
-12. Ejecuta una llamada `responses.parse` por prueba.
-13. Valida la criticidad y los IDs de controles devueltos.
-14. Guarda JSON, Markdown y retrieval debug.
+10. Selecciona archivos fuente relevantes de `inputs/<METOD>/` y `inputs/_global/` y adjunta como maximo `SOFTIA_MAX_PROMPT_FILES`.
+11. Sube los archivos seleccionados con Files API y `purpose="assistants"`; conserva los formatos originales y cambia solamente `.sas` a `.txt`.
+12. Convierte como maximo `SOFTIA_MAX_PROMPT_IMAGES` imagenes recuperadas a base64.
+13. Construye el input con el Markdown completo de la prueba.
+14. Ejecuta una llamada `responses.parse` por prueba.
+15. Valida la criticidad y los IDs de controles devueltos.
+16. Guarda JSON, Markdown y retrieval debug.
 
 ## 11. Evidencias soportadas
 
@@ -348,12 +357,18 @@ Extensiones actuales:
 
 Comportamiento relevante:
 
+- Todos estos formatos pueden ubicarse recursivamente tanto en `inputs/<METOD>/` como en `inputs/_global/`.
 - TXT/Markdown/codigo: lectura UTF-8 con reemplazo de caracteres invalidos.
 - CSV: maximo 1000 filas por archivo.
 - XLSX de evidencia: maximo 300 filas por hoja.
 - DOCX: extrae parrafos y tablas.
 - HTML: usa BeautifulSoup si esta disponible.
-- PDF: extrae texto pagina por pagina con `pypdf`.
+- PDF: extrae texto pagina por pagina con `pypdf` y, cuando es relevante, adjunta el archivo original con `detail="high"`.
+- DOCX, XLSX, CSV, HTML, Python y SQL: se suben directamente en su formato original.
+- SAS: conserva su contenido y se sube con el nombre `<archivo>.txt`, porque `.sas` no figura entre las extensiones aceptadas por `input_file`.
+- Los archivos se adjuntan solo cuando alguno de sus chunks fue recuperado para la prueba. Evidencia y contexto global se intercalan para que un grupo no desplace siempre al otro.
+- Un archivo seleccionado por varias pruebas se sube una sola vez, se referencia mediante el mismo `file_id` y se elimina al terminar correctamente la ejecucion.
+- El limite del proyecto es menor a 50 MB por archivo y menor a 50 MB combinados por request. Los archivos que exceden el limite no se adjuntan, pero sus chunks recuperados siguen presentes en el input textual.
 - Imagenes: se registran como chunks y, si son recuperadas, se adjuntan realmente al request multimodal en base64.
 - El descubrimiento de archivos es recursivo.
 
@@ -369,6 +384,7 @@ Cada request contiene:
 - glosario recuperado;
 - contexto global recuperado;
 - evidencia recuperada con archivo, chunk, score, extracto y metadata;
+- nombres, scope y `file_id` de archivos adjuntos como `input_file`;
 - nombres de imagenes adjuntas;
 - data URLs base64 como `input_image`.
 
@@ -464,6 +480,7 @@ Para cambios nuevos, empezar por `metod_observations/` y los dos notebooks numer
 - Azure OpenAI Responses API;
 - GPT-5.4 configurable por `.env`;
 - razonamiento `high`;
+- archivos relevantes adjuntados como `input_file` desde la carpeta del `METOD` y `_global`;
 - imagenes reales adjuntadas como base64;
 - Structured Outputs con Pydantic y `responses.parse`;
 - JSON, Markdown y retrieval debug;
@@ -480,8 +497,9 @@ Para cambios nuevos, empezar por `metod_observations/` y los dos notebooks numer
 
 - ejecucion end-to-end real en un cluster Databricks;
 - llamada real al deployment GPT-5.4 `OAIXXX05`;
+- aceptacion real de Files API, `input_file`, formatos Office y `detail="high"` por el deployment Azure;
 - compatibilidad real del deployment de embeddings configurado;
-- escritura real en `/dbfs/FileStore/softia_mvp/knowledge`;
+- escritura real en `/dbfs/FileStore/gestor_obs/knowledge`;
 - procesamiento del Excel maestro completo en el nuevo flujo;
 - calidad del retrieval para todos los `METOD`;
 - costo, latencia y limites de rate del volumen completo;
@@ -495,7 +513,7 @@ Prioridad alta:
 
 1. Ejecutar el notebook admin con el Excel real y revisar manifests, Markdown e indices generados.
 2. Ejecutar una prueba end-to-end pequena en Databricks con un `METOD` y evidencia conocida.
-3. Confirmar que el deployment GPT-5.4 acepta Responses API, `reasoning={"effort": "high"}`, imagenes y el modelo Pydantic actual.
+3. Confirmar que el deployment GPT-5.4 acepta Responses API, `reasoning={"effort": "high"}`, `input_file`, imagenes y el modelo Pydantic actual.
 4. Validar programaticamente que `evidencias_usadas` solo contenga chunks realmente recuperados. Hoy el schema valida la forma, pero no cruza esos IDs contra el conjunto enviado al modelo.
 5. Validar tambien la criticidad proveniente del Excel. Actualmente el enum se aplica a la salida del modelo, pero el loader no rechaza valores administrativos fuera del enum.
 
@@ -506,7 +524,7 @@ Prioridad media:
 3. Mejorar la recuperacion inicial de imagenes con captions u otro indice multimodal. Actualmente se recuperan por el texto generico asociado al nombre del archivo.
 4. Agregar reintentos controlados para errores transitorios y rate limits de Azure OpenAI.
 5. Registrar tokens/uso real devuelto por Responses API para estimar costo, no solo cantidad de requests y embeddings.
-6. Decidir donde residira `.env` cuando el notebook del usuario este en una carpeta externa. `load_dotenv(".env")` depende del directorio de trabajo actual; en produccion puede convenir una variable de cluster o una ruta administrada.
+6. En produccion, decidir si los secretos seguiran en `.env` o migraran a Databricks Secrets.
 
 Detalles a vigilar:
 
@@ -524,20 +542,18 @@ Detalles a vigilar:
 3. Crear `.env` desde `.env.example` con credenciales y deployments reales.
 4. No copiar ningun secreto dentro de este Markdown ni al repositorio.
 5. Subir o sincronizar el codigo en Databricks Workspace Files.
-6. Ajustar `SOFTIA_CODE_PATH` para que los notebooks importen `metod_observations`.
-7. Confirmar donde se resolvera `.env` en Databricks.
-8. Ejecutar primero `notebooks/01_admin_build_knowledge.py`.
-9. Revisar en FileStore:
+6. Ejecutar primero `notebooks/01_admin_build_knowledge.py`.
+7. Revisar en FileStore:
    - Markdown por prueba;
    - `manifest.json`;
    - embeddings de perfiles;
    - embeddings del glosario.
-10. Crear para un usuario:
+8. Crear para un usuario:
     - `inputs/<METOD>/`;
     - `inputs/_global/` si aplica.
-11. Ejecutar `notebooks/02_generate_observations_by_prueba.py`.
-12. Revisar el JSON final, el Markdown y especialmente `retrieval_debug_*.jsonl`.
-13. Antes de ampliar funcionalidad, resolver los pendientes de prioridad alta.
+9. Ejecutar `notebooks/02_generate_observations_by_prueba.py`.
+10. Revisar el JSON final, el Markdown y especialmente `retrieval_debug_*.jsonl`.
+11. Antes de ampliar funcionalidad, resolver los pendientes de prioridad alta.
 
 ## 19. Instrucciones para el siguiente Codex
 
@@ -567,6 +583,6 @@ El MVP puede considerarse operativo cuando:
 5. GPT-5.4 devuelve una salida valida por prueba;
 6. las observaciones citan solo evidencia recuperada real;
 7. los casos sin evidencia suficiente no inventan hallazgos;
-8. las imagenes relevantes llegan efectivamente al request multimodal;
+8. los archivos e imagenes relevantes llegan efectivamente al request multimodal;
 9. el debug permite auditar retrieval y archivos utilizados;
 10. costos y latencia son aceptables para el numero real de pruebas.

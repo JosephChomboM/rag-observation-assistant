@@ -1,6 +1,6 @@
 ﻿from __future__ import annotations
 
-from typing import Callable
+from typing import Any, Callable
 
 from .schemas import (
     ObservationResult,
@@ -14,7 +14,7 @@ Eres un validador metodologico.
 
 - Evalua todos los controles y devuelve una sola observacion consolidada por prueba.
 - No inventes evidencia ni valores. Usa solo la evidencia recuperada que sustente el resultado.
-- Analiza las imagenes adjuntas directamente, pero usalas solo cuando sean relevantes.
+- Analiza los archivos y las imagenes adjuntos directamente, pero usalos solo cuando sean relevantes.
 - Usa el contexto global para interpretar variables y parametros; no lo trates como evidencia de cumplimiento o incumplimiento.
 - No incluyas archivos de contexto global en evidencias_usadas.
 - Usa solamente los IDs de controles y evidencias proporcionados en la solicitud.
@@ -52,12 +52,14 @@ def generate_observation(
     input_text: str,
     prueba: PruebaSpec,
     chat_fn: Callable[..., ObservationPayload],
+    file_inputs: list[dict[str, Any]] | None = None,
     image_data_urls: list[str] | None = None,
 ) -> ObservationResult:
     parsed = chat_fn(
         input_text,
         instructions=OBSERVATION_INSTRUCTIONS,
         text_format=ObservationPayload,
+        file_inputs=file_inputs,
         image_data_urls=image_data_urls,
     )
     return validate_observation_payload(parsed, prueba)

@@ -20,18 +20,32 @@ import json
 import os
 import sys
 from dataclasses import replace
+from pathlib import Path
 
 import truststore
 from dotenv import load_dotenv
 
-load_dotenv(".env", override=True)
+
+def find_repo_root() -> str:
+    starts = [Path.cwd()]
+    if "__file__" in globals():
+        starts.append(Path(__file__).resolve().parent)
+    for start in starts:
+        for candidate in (start, *start.parents):
+            if (candidate / "metod_observations").is_dir():
+                return str(candidate)
+    raise FileNotFoundError("No se encontro la raiz del repositorio.")
+
+
+repo_root = find_repo_root()
+load_dotenv(os.path.join(repo_root, ".env"), override=True)
 truststore.inject_into_ssl()
 
 try:
     dbutils.widgets.text("metod_id", "BBDD1", "METOD")
     dbutils.widgets.text(
         "user_base_dir",
-        os.getenv("SOFTIA_WORKSPACE_BASE_DIR", ""),
+        "",
         "Carpeta del usuario",
     )
 except NameError:
@@ -45,7 +59,6 @@ def get_widget(name: str, default: str = "") -> str:
         return os.getenv(name.upper(), default).strip()
 
 
-repo_root = os.getenv("SOFTIA_CODE_PATH", os.getcwd()).strip()
 if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
 
@@ -54,13 +67,15 @@ from metod_observations.pipeline import run_observation_pipeline  # noqa: E402
 
 # COMMAND ----------
 
-base_config = load_config()
-user_base_dir = get_widget("user_base_dir") or base_config.workspace_base_dir
+base_config = load_config(os.path.join(repo_root, ".env"))
+user_base_dir = get_widget("user_base_dir")
 metod_id = get_widget("metod_id", "BBDD1").upper()
+
+if not user_base_dir:
+    raise ValueError("Indica la carpeta del usuario en el widget user_base_dir.")
 
 config = replace(
     base_config,
-    workspace_base_dir=user_base_dir,
     inputs_base_dir=os.path.join(user_base_dir, "inputs"),
     indexes_base_dir=os.path.join(user_base_dir, "indexes"),
     outputs_base_dir=os.path.join(user_base_dir, "outputs", "generated_observations"),

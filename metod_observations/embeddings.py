@@ -3,6 +3,7 @@
 import hashlib
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable
 
 from pydantic import BaseModel
@@ -63,11 +64,32 @@ class ModelClient:
         )
         return response.data[0].embedding
 
+    def upload_input_file(self, path: str) -> tuple[str, str]:
+        source = Path(path)
+        if source.suffix.lower() == ".sas":
+            uploaded_name = f"{source.stem}.txt"
+            uploaded = self._client().files.create(
+                file=(uploaded_name, source.read_bytes(), "text/plain"),
+                purpose="assistants",
+            )
+        else:
+            uploaded_name = source.name
+            with source.open("rb") as file:
+                uploaded = self._client().files.create(
+                    file=file,
+                    purpose="assistants",
+                )
+        return uploaded.id, uploaded_name
+
+    def delete_input_file(self, file_id: str) -> None:
+        self._client().files.delete(file_id)
+
     def parse_response(
         self,
         input_text: str,
         instructions: str,
         text_format: type[BaseModel],
+        file_inputs: list[dict[str, Any]] | None = None,
         image_data_urls: list[str] | None = None,
         max_output_tokens: int = 1800,
     ) -> BaseModel:
@@ -76,7 +98,8 @@ class ModelClient:
                 "Missing chat deployment. Set AZURE_OPENAI_CHAT_DEPLOYMENT, "
                 "DEPLOYMENT_GPT54 or DEPLOYMENT_AZURE in .env."
             )
-        content: list[dict[str, Any]] = [{"type": "input_text", "text": input_text}]
+        content: list[dict[str, Any]] = list(file_inputs or [])
+        content.append({"type": "input_text", "text": input_text})
         content.extend(
             {
                 "type": "input_image",

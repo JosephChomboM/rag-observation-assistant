@@ -90,8 +90,8 @@ For the MVP, stable METOD knowledge should be stored in FileStore or Blob Storag
 Default MVP path:
 
 ```text
-/dbfs/FileStore/softia_mvp/knowledge/METOD1/
-/dbfs/FileStore/softia_mvp/knowledge/METOD2/
+/dbfs/FileStore/gestor_obs/knowledge/METOD1/
+/dbfs/FileStore/gestor_obs/knowledge/METOD2/
 ...
 ```
 
@@ -222,13 +222,13 @@ It should live in FileStore or Blob Storage.
 For the MVP, use FileStore:
 
 ```text
-/dbfs/FileStore/softia_mvp/knowledge/
+/dbfs/FileStore/gestor_obs/knowledge/
 ```
 
 Knowledge folder structure:
 
 ```text
-/dbfs/FileStore/softia_mvp/knowledge/
+/dbfs/FileStore/gestor_obs/knowledge/
 │
 ├── METOD1/
 │   ├── rules.md
@@ -248,7 +248,7 @@ Knowledge folder structure:
 The knowledge base path must be configurable:
 
 ```python
-KNOWLEDGE_BASE_DIR = "/dbfs/FileStore/softia_mvp/knowledge"
+KNOWLEDGE_BASE_DIR = "/dbfs/FileStore/gestor_obs/knowledge"
 ```
 
 If Blob Storage or ADLS is available later, the path should be easy to replace:
@@ -331,7 +331,7 @@ The MVP should avoid Spark for file reading unless necessary.
 Use:
 
 ```text
-/dbfs/FileStore/softia_mvp/knowledge/METODX/
+/dbfs/FileStore/gestor_obs/knowledge/METODX/
 ```
 
 Use these with normal Python file operations.
@@ -383,7 +383,7 @@ The MVP should use this folder structure.
 ## 6.2 FileStore or Blob Storage: METOD Knowledge
 
 ```text
-/dbfs/FileStore/softia_mvp/knowledge/
+/dbfs/FileStore/gestor_obs/knowledge/
 │
 ├── METOD1/
 │   ├── rules.md
@@ -473,7 +473,7 @@ WORKSPACE_BASE_URI = f"file:{WORKSPACE_BASE_DIR}"
 
 # Stable METOD knowledge lives in FileStore or Blob/ADLS.
 # MVP default: FileStore.
-KNOWLEDGE_BASE_DIR = "/dbfs/FileStore/softia_mvp/knowledge"
+KNOWLEDGE_BASE_DIR = "/dbfs/FileStore/gestor_obs/knowledge"
 
 # If Blob/ADLS is mounted later, replace with something like:
 # KNOWLEDGE_BASE_DIR = "/mnt/softia-knowledge/knowledge"

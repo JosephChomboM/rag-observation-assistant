@@ -24,6 +24,9 @@ from .retrieval import compact_retrieved_evidence, retrieve_top_k
 from .schemas import ControlSpec, PruebaSpec
 
 
+MAX_FILE_INPUT_BYTES = 50_000_000
+
+
 def build_admin_knowledge(
     excel_path: str,
     knowledge_base_dir: str | None = None,
@@ -347,6 +350,98 @@ def _prompt_image_attachments(
             break
     return image_data_urls, image_files
 
+
+def _file_candidates(
+    rows: list[dict[str, Any]],
+    scope: str,
+) -> list[tuple[str, str]]:
+    candidates: list[tuple[str, str]] = []
+    seen_paths: set[str] = set()
+    for row in rows:
+        metadata = row.get("chunk", {}).get("metadata", {})
+        source_path = metadata.get("source_path")
+        if (
+            metadata.get("content_type") == "image"
+            or not source_path
+            or source_path in seen_paths
+            or not os.path.exists(source_path)
+        ):
+            continue
+        candidates.append((source_path, scope))
+        seen_paths.add(source_path)
+    return candidates
+
+
+def _interleave_file_candidates(
+    evidence_rows: list[dict[str, Any]],
+    global_rows: list[dict[str, Any]],
+) -> list[tuple[str, str]]:
+    evidence = _file_candidates(evidence_rows, "evidence")
+    global_context = _file_candidates(global_rows, "global")
+    ordered: list[tuple[str, str]] = []
+    for index in range(max(len(evidence), len(global_context))):
+        if index < len(evidence):
+            ordered.append(evidence[index])
+        if index < len(global_context):
+            ordered.append(global_context[index])
+    return ordered
+
+
+def _prompt_file_attachments(
+    selected_evidence_rows: list[dict[str, Any]],
+    selected_global_rows: list[dict[str, Any]],
+    client: ModelClient,
+    uploaded_files: dict[str, tuple[str, str]],
+    max_files: int,
+) -> tuple[list[dict[str, Any]], list[dict[str, str]], set[str], list[str]]:
+    if max_files <= 0:
+        return [], [], set(), []
+
+    file_inputs: list[dict[str, Any]] = []
+    descriptors: list[dict[str, str]] = []
+    attached_paths: set[str] = set()
+    skipped_files: list[str] = []
+    total_bytes = 0
+
+    for source_path, scope in _interleave_file_candidates(
+        selected_evidence_rows,
+        selected_global_rows,
+    ):
+        if len(file_inputs) >= max_files:
+            break
+        content_bytes = os.path.getsize(source_path)
+        if content_bytes >= MAX_FILE_INPUT_BYTES:
+            skipped_files.append(source_path)
+            continue
+        if total_bytes + content_bytes >= MAX_FILE_INPUT_BYTES:
+            skipped_files.append(source_path)
+            continue
+
+        if source_path not in uploaded_files:
+            uploaded_files[source_path] = client.upload_input_file(source_path)
+        file_id, uploaded_name = uploaded_files[source_path]
+
+        file_input: dict[str, Any] = {
+            "type": "input_file",
+            "file_id": file_id,
+        }
+        if Path(source_path).suffix.lower() == ".pdf":
+            file_input["detail"] = "high"
+
+        descriptor = {
+            "archivo": Path(source_path).name,
+            "scope": scope,
+            "input_file": uploaded_name,
+        }
+
+        file_inputs.append(file_input)
+        descriptors.append(descriptor)
+        attached_paths.add(source_path)
+        total_bytes += content_bytes
+
+    return file_inputs, descriptors, attached_paths, skipped_files
+
+
 def run_observation_pipeline(
     metod_id: str,
     config: AppConfig | None = None,
@@ -354,6 +449,17 @@ def run_observation_pipeline(
     model_client: ModelClient | None = None,
 ) -> dict[str, Any]:
     active_config = config or load_config()
+    if not all(
+        [
+            active_config.inputs_base_dir,
+            active_config.indexes_base_dir,
+            active_config.outputs_base_dir,
+        ]
+    ):
+        raise ValueError(
+            "Missing user workspace paths. Set user_base_dir in "
+            "notebooks/02_generate_observations_by_prueba.py."
+        )
     clean_metod = metod_id.strip().upper()
     paths = metod_paths(active_config, clean_metod)
     ensure_dir(paths["input_dir"])
@@ -426,6 +532,9 @@ def run_observation_pipeline(
 
     observations = []
     retrieval_debug_rows = []
+    prompt_files_sent = 0
+    prompt_files_skipped = 0
+    uploaded_files: dict[str, tuple[str, str]] = {}
     for prueba in pruebas:
         profile_row = profiles_by_prueba[prueba.prueba_id]
         query_text = profile_row.get("text") or prueba_profile_text(prueba)
@@ -448,6 +557,17 @@ def run_observation_pipeline(
             glossary_rows,
             active_config.top_k_glossary,
         )
+        file_inputs, attached_files, attached_file_paths, skipped_files = (
+            _prompt_file_attachments(
+                selected_evidence_rows,
+                selected_global_context_rows,
+                client,
+                uploaded_files,
+                active_config.max_prompt_files,
+            )
+        )
+        prompt_files_sent += len(file_inputs)
+        prompt_files_skipped += len(skipped_files)
         image_data_urls, attached_image_files = _prompt_image_attachments(
             selected_evidence_rows,
             active_config.max_prompt_images,
@@ -459,6 +579,7 @@ def run_observation_pipeline(
             retrieved_evidence,
             retrieved_global_context,
             selected_glossary_rows,
+            attached_files=attached_files,
             attached_image_files=attached_image_files,
         )
         observations.append(
@@ -466,6 +587,7 @@ def run_observation_pipeline(
                 input_text,
                 prueba,
                 client.parse_response,
+                file_inputs=file_inputs,
                 image_data_urls=image_data_urls,
             )
         )
@@ -479,6 +601,10 @@ def run_observation_pipeline(
                     "score": row.get("score"),
                     "chunk_id": row.get("id"),
                     "source_file": row.get("source_file"),
+                    "sent_as_prompt_file": row.get("chunk", {})
+                    .get("metadata", {})
+                    .get("source_path")
+                    in attached_file_paths,
                     "sent_as_prompt_image": row.get("source_file") in attached_image_files,
                 }
             )
@@ -502,6 +628,10 @@ def run_observation_pipeline(
                     "chunk_id": row.get("id"),
                     "source_file": row.get("source_file"),
                     "source_scope": "global",
+                    "sent_as_prompt_file": row.get("chunk", {})
+                    .get("metadata", {})
+                    .get("source_path")
+                    in attached_file_paths,
                 }
             )
 
@@ -513,6 +643,10 @@ def run_observation_pipeline(
         "controls_processed": sum(len(prueba.controls) for prueba in pruebas),
         "llm_generation_requests": len(pruebas),
         "top_k_global_context_per_prueba": active_config.top_k_global_context,
+        "max_prompt_files_per_prueba": active_config.max_prompt_files,
+        "files_uploaded": len(uploaded_files),
+        "prompt_files_sent": prompt_files_sent,
+        "prompt_files_skipped_by_size": prompt_files_skipped,
         "max_prompt_images_per_prueba": active_config.max_prompt_images,
         "glossary_embeddings_loaded": len(glossary_rows),
         "profile_embeddings_loaded": len(profile_rows),
@@ -526,10 +660,13 @@ def run_observation_pipeline(
         retrieval_debug_rows,
         usage_summary,
     )
-    return {
+    result = {
         "metod_id": clean_metod,
         "run_id": run_id,
         "output_paths": output_paths,
         "usage_summary": usage_summary,
         "observations": [observation.to_dict() for observation in observations],
     }
+    for file_id, _ in uploaded_files.values():
+        client.delete_input_file(file_id)
+    return result

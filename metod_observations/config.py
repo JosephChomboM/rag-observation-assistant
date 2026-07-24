@@ -5,8 +5,6 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class AppConfig:
-    user_email: str
-    workspace_base_dir: str
     knowledge_base_dir: str
     inputs_base_dir: str
     indexes_base_dir: str
@@ -17,6 +15,7 @@ class AppConfig:
     top_k_evidence: int = 8
     top_k_global_context: int = 4
     top_k_glossary: int = 5
+    max_prompt_files: int = 4
     max_prompt_images: int = 2
     chunk_size: int = 1800
     chunk_overlap: int = 200
@@ -52,32 +51,26 @@ def resolve_chat_deployment() -> str:
     )
 
 
-def load_config() -> AppConfig:
-    configure_runtime()
-    user_email = os.getenv("SOFTIA_USER_EMAIL", "josephchombo@company.com").strip()
-    workspace_base = os.getenv(
-        "SOFTIA_WORKSPACE_BASE_DIR",
-        f"/Workspace/Users/{user_email}/softia_mvp",
-    ).strip()
+def load_config(env_path: str = ".env") -> AppConfig:
+    configure_runtime(env_path)
     knowledge_base = os.getenv(
         "SOFTIA_KNOWLEDGE_BASE_DIR",
-        "/dbfs/FileStore/softia_mvp/knowledge",
+        "/dbfs/FileStore/gestor_obs/knowledge",
     ).strip()
     reasoning_effort = os.getenv("SOFTIA_REASONING_EFFORT", "high").strip().lower()
 
     return AppConfig(
-        user_email=user_email,
-        workspace_base_dir=workspace_base,
         knowledge_base_dir=knowledge_base,
-        inputs_base_dir=os.path.join(workspace_base, "inputs"),
-        indexes_base_dir=os.path.join(workspace_base, "indexes"),
-        outputs_base_dir=os.path.join(workspace_base, "outputs", "generated_observations"),
+        inputs_base_dir="",
+        indexes_base_dir="",
+        outputs_base_dir="",
         embedding_deployment=resolve_embedding_deployment(),
         chat_deployment=resolve_chat_deployment(),
         reasoning_effort=reasoning_effort,
         top_k_evidence=int(os.getenv("SOFTIA_TOP_K_EVIDENCE", "8")),
         top_k_global_context=int(os.getenv("SOFTIA_TOP_K_GLOBAL_CONTEXT", "4")),
         top_k_glossary=int(os.getenv("SOFTIA_TOP_K_GLOSSARY", "5")),
+        max_prompt_files=int(os.getenv("SOFTIA_MAX_PROMPT_FILES", "4")),
         max_prompt_images=int(os.getenv("SOFTIA_MAX_PROMPT_IMAGES", "2")),
         chunk_size=int(os.getenv("SOFTIA_CHUNK_SIZE", "1800")),
         chunk_overlap=int(os.getenv("SOFTIA_CHUNK_OVERLAP", "200")),

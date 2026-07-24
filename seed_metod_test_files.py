@@ -18,7 +18,7 @@ import os
 
 USER_EMAIL = "josephchombo@company.com"
 WORKSPACE_BASE_DIR = f"/Workspace/Users/{USER_EMAIL}/softia_mvp"
-KNOWLEDGE_BASE_DIR = "/dbfs/FileStore/softia_mvp/knowledge"
+KNOWLEDGE_BASE_DIR = "/dbfs/FileStore/gestor_obs/knowledge"
 
 METOD_ID = "METOD1"
 
@@ -156,4 +156,3 @@ for file_path, content in files_to_write.items():
     print("Wrote:", file_path)
 
 print("Seed files created. Now run metod_rag_observation_generator.py with METOD1 and rebuild_index=true.")
-

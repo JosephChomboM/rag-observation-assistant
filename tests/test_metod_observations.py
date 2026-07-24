@@ -162,7 +162,6 @@ class MetodObservationTests(unittest.TestCase):
 
             config = replace(
                 load_config(),
-                workspace_base_dir=str(workspace_dir),
                 knowledge_base_dir=str(knowledge_dir),
                 inputs_base_dir=str(workspace_dir / "inputs"),
                 indexes_base_dir=str(workspace_dir / "indexes"),
@@ -185,5 +184,4 @@ class MetodObservationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
 
