@@ -109,6 +109,7 @@ class ObservationResult:
     controles_que_originan_observacion: list[str]
     evidencias_usadas: list[dict[str, Any]]
     informacion_faltante: list[str]
+    sustento_suficiente: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

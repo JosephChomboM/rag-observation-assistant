@@ -56,6 +56,7 @@ def validate_observation_payload(
             controles_que_originan_observacion=controles_origen or controles_evaluados,
             evidencias_usadas=[item.model_dump() for item in parsed.evidencias_usadas],
             informacion_faltante=parsed.informacion_faltante or [SIN_SUSTENTO_OBSERVACION],
+            sustento_suficiente=False,
         )
 
     return ObservationResult(

@@ -81,6 +81,10 @@ if backend_project_dir not in sys.path:
     sys.path.insert(0, backend_project_dir)
 
 from metod_observations.config import load_config  # noqa: E402
+from metod_observations.outputs import (  # noqa: E402
+    observation_table_rows,
+    run_summary_text,
+)
 from metod_observations.pipeline import (  # noqa: E402
     prepare_user_workspace,
     run_observation_pipeline,
@@ -131,25 +135,43 @@ result = run_observation_pipeline(
     config=config,
 )
 
-print("Run completed.")
-print("Markdown en:", config.outputs_base_dir)
-print(json.dumps(result["usage_summary"], ensure_ascii=False, indent=2))
-print(json.dumps(result["output_paths"], ensure_ascii=False, indent=2))
+print(run_summary_text(result))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Pruebas con observacion
+# MAGIC Solo las que tienen hallazgo, de mayor a menor criticidad.
+# MAGIC El detalle completo de todas las pruebas esta en el Markdown.
+
+# COMMAND ----------
+
+rows = observation_table_rows(
+    [row for row in result["observations"] if row["hay_observacion"]]
+)
+
+if not rows:
+    print("Ninguna prueba genero observacion.")
+else:
+    try:
+        display(rows)
+    except NameError:
+        for row in rows:
+            print(f"\n[{row['Criticidad']}] {row['Prueba']} - {row['Nombre']}")
+            print(f"  Observacion         : {row['Observacion']}")
+            print(f"  Controles           : {row['Controles con hallazgo']}")
+            print(f"  Informacion faltante: {row['Informacion faltante']}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Detalle tecnico
+# MAGIC Solo si necesitas auditar el retrieval: que fragmento se recupero para cada
+# MAGIC prueba, con que score y por que canal. No se guarda en disco.
 
 # COMMAND ----------
 
 try:
-    display(
-        [
-            {
-                "prueba_id": row["prueba_id"],
-                "nombre_prueba": row["nombre_prueba"],
-                "hay_observacion": row["hay_observacion"],
-                "criticidad": row["criticidad"],
-                "observacion": row["observacion"][:250],
-            }
-            for row in result["observations"]
-        ]
-    )
+    display(result["retrieval_debug"])
 except NameError:
-    print(json.dumps(result["observations"], ensure_ascii=False, indent=2))
+    print(json.dumps(result["retrieval_debug"], ensure_ascii=False, indent=2))
