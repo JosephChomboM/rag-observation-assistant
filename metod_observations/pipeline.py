@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .chunking import build_evidence_chunks
-from .config import AppConfig, load_config, metod_paths
+from .config import AppConfig, load_config, metod_paths, resolve_run_details_dir
 from .embeddings import EmbeddingStats, ModelClient, embed_rows_with_cache
 from .excel_loader import load_pruebas_from_excel
 from .io_utils import ensure_dir, read_json, read_jsonl, write_jsonl
@@ -20,7 +20,13 @@ from .observation_generator import generate_observation
 from .outputs import save_run_outputs, utc_run_id
 from .parsers import list_evidence_files, parse_evidence_files
 from .prompt_builder import build_generation_input
-from .retrieval import compact_retrieved_evidence, retrieve_top_k
+from .reranking import rerank_rows
+from .retrieval import (
+    build_bm25_index,
+    compact_retrieved_evidence,
+    retrieve_hybrid,
+    retrieve_top_k,
+)
 from .schemas import ControlSpec, PruebaSpec
 
 
@@ -113,6 +119,7 @@ def build_evidence_index(
         chunk_size=chunk_size,
         overlap=chunk_overlap,
         common_metadata={"source_scope": source_scope},
+        base_dir=input_dir,
     )
     existing = [] if rebuild else read_jsonl(index_path)
     rows, stats = embed_rows_with_cache(
@@ -318,6 +325,26 @@ def _select_glossary_rows(
 
 
 
+def _retrieve_context(
+    query_text: str,
+    query_embedding: list[float],
+    rows: list[dict[str, Any]],
+    top_k: int,
+    config: AppConfig,
+    bm25_index: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    if config.retrieval_mode == "hybrid":
+        return retrieve_hybrid(
+            query_text,
+            query_embedding,
+            rows,
+            top_k,
+            candidate_multiplier=config.candidate_multiplier,
+            bm25_index=bm25_index,
+        )
+    return retrieve_top_k(query_embedding, rows, top_k)
+
+
 def _image_to_data_url(path: str) -> str:
     mime_type = mimetypes.guess_type(path)[0] or "image/png"
     with open(path, "rb") as file:
@@ -442,6 +469,68 @@ def _prompt_file_attachments(
     return file_inputs, descriptors, attached_paths, skipped_files
 
 
+def prepare_user_workspace(
+    metod_id: str,
+    config: AppConfig | None = None,
+) -> dict[str, Any]:
+    """Create the user folder tree and report what is still missing.
+
+    Run this before `run_observation_pipeline`: it creates the empty folders so
+    the user can drop the evidence in, and reports whether the METOD folder
+    already has supported files. It never calls the model.
+    """
+    active_config = config or load_config()
+    if not all(
+        [
+            active_config.inputs_base_dir,
+            active_config.indexes_base_dir,
+            active_config.outputs_base_dir,
+        ]
+    ):
+        raise ValueError(
+            "Missing user workspace paths. Set user_base_dir in "
+            "gestor_observaciones/02_generate_observations_by_prueba.py."
+        )
+
+    clean_metod = metod_id.strip().upper()
+    paths = metod_paths(active_config, clean_metod)
+    run_details_dir = resolve_run_details_dir(active_config)
+    for folder in (
+        paths["input_dir"],
+        paths["global_input_dir"],
+        paths["index_dir"],
+        paths["global_index_dir"],
+        active_config.outputs_base_dir,
+        run_details_dir,
+    ):
+        ensure_dir(folder)
+
+    evidence_files = list_evidence_files(paths["input_dir"])
+    global_files = list_evidence_files(paths["global_input_dir"])
+    missing_knowledge = [
+        path
+        for path in (
+            paths["manifest_path"],
+            paths["profile_index_path"],
+            paths["glossary_index_path"],
+        )
+        if not os.path.exists(path)
+    ]
+
+    return {
+        "metod_id": clean_metod,
+        "input_dir": paths["input_dir"],
+        "global_input_dir": paths["global_input_dir"],
+        "index_dir": paths["index_dir"],
+        "outputs_dir": active_config.outputs_base_dir,
+        "run_details_dir": run_details_dir,
+        "evidence_files": evidence_files,
+        "global_context_files": global_files,
+        "missing_admin_knowledge": missing_knowledge,
+        "ready": bool(evidence_files) and not missing_knowledge,
+    }
+
+
 def run_observation_pipeline(
     metod_id: str,
     config: AppConfig | None = None,
@@ -467,6 +556,7 @@ def run_observation_pipeline(
     ensure_dir(paths["index_dir"])
     ensure_dir(paths["global_index_dir"])
     ensure_dir(active_config.outputs_base_dir)
+    ensure_dir(resolve_run_details_dir(active_config))
 
     if not os.path.exists(paths["manifest_path"]):
         raise FileNotFoundError(
@@ -534,21 +624,52 @@ def run_observation_pipeline(
     retrieval_debug_rows = []
     prompt_files_sent = 0
     prompt_files_skipped = 0
+    reranked_pruebas = 0
     uploaded_files: dict[str, tuple[str, str]] = {}
+    evidence_bm25 = (
+        build_bm25_index(evidence_rows)
+        if active_config.retrieval_mode == "hybrid"
+        else None
+    )
+    global_bm25 = (
+        build_bm25_index(global_context_rows)
+        if active_config.retrieval_mode == "hybrid"
+        else None
+    )
     for prueba in pruebas:
         profile_row = profiles_by_prueba[prueba.prueba_id]
         query_text = profile_row.get("text") or prueba_profile_text(prueba)
         query_embedding = profile_row["embedding"]
-        selected_evidence_rows = retrieve_top_k(
+        first_stage_k = (
+            active_config.top_k_evidence * active_config.candidate_multiplier
+            if active_config.enable_rerank
+            else active_config.top_k_evidence
+        )
+        selected_evidence_rows = _retrieve_context(
+            query_text,
             query_embedding,
             evidence_rows,
-            active_config.top_k_evidence,
+            first_stage_k,
+            active_config,
+            evidence_bm25,
         )
+        if active_config.enable_rerank:
+            selected_evidence_rows, reranked = rerank_rows(
+                query_text,
+                selected_evidence_rows,
+                active_config.top_k_evidence,
+                client.parse_response,
+                min_relevance=active_config.rerank_min_relevance,
+            )
+            reranked_pruebas += int(reranked)
         retrieved_evidence = compact_retrieved_evidence(selected_evidence_rows)
-        selected_global_context_rows = retrieve_top_k(
+        selected_global_context_rows = _retrieve_context(
+            query_text,
             query_embedding,
             global_context_rows,
             active_config.top_k_global_context,
+            active_config,
+            global_bm25,
         )
         retrieved_global_context = compact_retrieved_evidence(selected_global_context_rows)
         selected_glossary_rows = _select_glossary_rows(
@@ -599,6 +720,9 @@ def run_observation_pipeline(
                     "prueba_id": prueba.prueba_id,
                     "source_type": "evidence",
                     "score": row.get("score"),
+                    "retrieval_mode": active_config.retrieval_mode,
+                    "found_by": row.get("found_by"),
+                    "rerank_relevance": row.get("rerank_relevance"),
                     "chunk_id": row.get("id"),
                     "source_file": row.get("source_file"),
                     "sent_as_prompt_file": row.get("chunk", {})
@@ -642,6 +766,10 @@ def run_observation_pipeline(
         "pruebas_processed": len(pruebas),
         "controls_processed": sum(len(prueba.controls) for prueba in pruebas),
         "llm_generation_requests": len(pruebas),
+        "retrieval_mode": active_config.retrieval_mode,
+        "rerank_enabled": active_config.enable_rerank,
+        "pruebas_reranked": reranked_pruebas,
+        "llm_rerank_requests": reranked_pruebas,
         "top_k_global_context_per_prueba": active_config.top_k_global_context,
         "max_prompt_files_per_prueba": active_config.max_prompt_files,
         "files_uploaded": len(uploaded_files),
@@ -654,6 +782,7 @@ def run_observation_pipeline(
     }
     output_paths = save_run_outputs(
         active_config.outputs_base_dir,
+        resolve_run_details_dir(active_config),
         clean_metod,
         run_id,
         observations,

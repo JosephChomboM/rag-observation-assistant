@@ -11,6 +11,7 @@ class AppConfig:
     outputs_base_dir: str
     embedding_deployment: str
     chat_deployment: str
+    run_details_dir: str = ""
     reasoning_effort: str = "high"
     top_k_evidence: int = 8
     top_k_global_context: int = 4
@@ -19,6 +20,10 @@ class AppConfig:
     max_prompt_images: int = 2
     chunk_size: int = 1800
     chunk_overlap: int = 200
+    retrieval_mode: str = "hybrid"
+    candidate_multiplier: int = 3
+    enable_rerank: bool = False
+    rerank_min_relevance: int = 1
 
 
 def configure_runtime(env_path: str = ".env") -> None:
@@ -29,26 +34,12 @@ def configure_runtime(env_path: str = ".env") -> None:
     truststore.inject_into_ssl()
 
 
-def first_env(names: list[str], default: str) -> str:
-    for name in names:
-        value = os.getenv(name, "").strip()
-        if value:
-            return value
-    return default
-
-
 def resolve_embedding_deployment() -> str:
-    return first_env(
-        ["AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "DEPLOYMENT_EMB_SMALL"],
-        "",
-    )
+    return os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "").strip()
 
 
 def resolve_chat_deployment() -> str:
-    return first_env(
-        ["AZURE_OPENAI_CHAT_DEPLOYMENT", "DEPLOYMENT_GPT54", "DEPLOYMENT_AZURE"],
-        "",
-    )
+    return os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT", "").strip()
 
 
 def load_config(env_path: str = ".env") -> AppConfig:
@@ -74,7 +65,23 @@ def load_config(env_path: str = ".env") -> AppConfig:
         max_prompt_images=int(os.getenv("SOFTIA_MAX_PROMPT_IMAGES", "2")),
         chunk_size=int(os.getenv("SOFTIA_CHUNK_SIZE", "1800")),
         chunk_overlap=int(os.getenv("SOFTIA_CHUNK_OVERLAP", "200")),
+        retrieval_mode=os.getenv("SOFTIA_RETRIEVAL_MODE", "hybrid").strip().lower(),
+        candidate_multiplier=int(os.getenv("SOFTIA_CANDIDATE_MULTIPLIER", "3")),
+        enable_rerank=os.getenv("SOFTIA_ENABLE_RERANK", "false").strip().lower() == "true",
+        rerank_min_relevance=int(os.getenv("SOFTIA_RERANK_MIN_RELEVANCE", "1")),
     )
+
+
+def resolve_run_details_dir(config: AppConfig) -> str:
+    """Folder for run artifacts that are not the deliverable markdown.
+
+    `outputs_base_dir` must contain only the observation markdown files, so the
+    run JSON and the retrieval debug land here instead.
+    """
+    if config.run_details_dir:
+        return config.run_details_dir
+    outputs_dir = os.path.normpath(config.outputs_base_dir)
+    return os.path.join(os.path.dirname(outputs_dir), "run_details")
 
 
 def metod_paths(config: AppConfig, metod_id: str) -> dict[str, str]:

@@ -14,6 +14,18 @@ The pipeline reads:
 - shared user context from <user_base_dir>/inputs/_global/
 - admin knowledge and stable embeddings from SOFTIA_KNOWLEDGE_BASE_DIR
 
+And writes:
+- the observation markdown to <user_base_dir>/outputs/
+- the run JSON and retrieval debug to <user_base_dir>/run_details/
+- the embedding cache to <user_base_dir>/indexes/
+
+Every run writes new files stamped with its own run_id, so previous runs are
+never overwritten.
+
+Run the cells in order: the "Preparar carpetas" cell creates the folder tree and
+stops if the METOD folder has no evidence yet, so nothing is sent to the model
+until the evidence is in place.
+
 Model deployments, reasoning, retrieval and chunking settings come from .env.
 """
 
@@ -64,7 +76,10 @@ if backend_project_dir not in sys.path:
     sys.path.insert(0, backend_project_dir)
 
 from metod_observations.config import load_config  # noqa: E402
-from metod_observations.pipeline import run_observation_pipeline  # noqa: E402
+from metod_observations.pipeline import (  # noqa: E402
+    prepare_user_workspace,
+    run_observation_pipeline,
+)
 
 # COMMAND ----------
 
@@ -79,13 +94,51 @@ config = replace(
     base_config,
     inputs_base_dir=os.path.join(user_base_dir, "inputs"),
     indexes_base_dir=os.path.join(user_base_dir, "indexes"),
-    outputs_base_dir=os.path.join(user_base_dir, "outputs", "generated_observations"),
+    outputs_base_dir=os.path.join(user_base_dir, "outputs"),
+    run_details_dir=os.path.join(user_base_dir, "run_details"),
 )
 
 print("METOD:", metod_id)
+print("Deployment GPT-5.4:", config.chat_deployment)
+print("Deployment text-embedding-3-small:", config.embedding_deployment)
 print("Evidencias:", os.path.join(config.inputs_base_dir, metod_id))
 print("Contexto global:", os.path.join(config.inputs_base_dir, "_global"))
-print("Resultados:", config.outputs_base_dir)
+print("Resultados (solo markdown):", config.outputs_base_dir)
+print("Detalle de corrida:", config.run_details_dir)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Preparar carpetas
+# MAGIC Crea el arbol de trabajo y verifica que haya evidencia antes de gastar tokens.
+# MAGIC Si la celda corta, copia tus archivos en la carpeta indicada y vuelve a ejecutarla.
+
+# COMMAND ----------
+
+workspace = prepare_user_workspace(metod_id=metod_id, config=config)
+
+print("Evidencia en", workspace["input_dir"], ":", len(workspace["evidence_files"]), "archivo(s)")
+print(
+    "Contexto global en",
+    workspace["global_input_dir"],
+    ":",
+    len(workspace["global_context_files"]),
+    "archivo(s)",
+)
+
+if workspace["missing_admin_knowledge"]:
+    raise FileNotFoundError(
+        "Falta conocimiento admin para "
+        f"{metod_id}: {workspace['missing_admin_knowledge']}. "
+        "Pide al administrador que ejecute 01_admin_build_knowledge.py."
+    )
+
+if not workspace["evidence_files"]:
+    raise FileNotFoundError(
+        "Carpetas creadas, pero no hay evidencia para "
+        f"{metod_id}. Copia tus archivos en {workspace['input_dir']} "
+        "y vuelve a ejecutar esta celda antes de generar observaciones."
+    )
 
 # COMMAND ----------
 
@@ -95,6 +148,7 @@ result = run_observation_pipeline(
 )
 
 print("Run completed.")
+print("Markdown en:", config.outputs_base_dir)
 print(json.dumps(result["usage_summary"], ensure_ascii=False, indent=2))
 print(json.dumps(result["output_paths"], ensure_ascii=False, indent=2))
 

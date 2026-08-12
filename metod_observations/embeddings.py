@@ -55,8 +55,8 @@ class ModelClient:
     def embed_text(self, text: str) -> list[float]:
         if not self.embedding_deployment:
             raise ValueError(
-                "Missing embedding deployment. Set AZURE_OPENAI_EMBEDDING_DEPLOYMENT "
-                "or DEPLOYMENT_EMB_SMALL in .env."
+                "Missing embedding deployment. Set "
+                "AZURE_OPENAI_EMBEDDING_DEPLOYMENT in .env."
             )
         response = self._client().embeddings.create(
             model=self.embedding_deployment,
@@ -91,12 +91,11 @@ class ModelClient:
         text_format: type[BaseModel],
         file_inputs: list[dict[str, Any]] | None = None,
         image_data_urls: list[str] | None = None,
-        max_output_tokens: int = 1800,
+        max_output_tokens: int = 25_000,
     ) -> BaseModel:
         if not self.chat_deployment:
             raise ValueError(
-                "Missing chat deployment. Set AZURE_OPENAI_CHAT_DEPLOYMENT, "
-                "DEPLOYMENT_GPT54 or DEPLOYMENT_AZURE in .env."
+                "Missing chat deployment. Set AZURE_OPENAI_CHAT_DEPLOYMENT in .env."
             )
         content: list[dict[str, Any]] = list(file_inputs or [])
         content.append({"type": "input_text", "text": input_text})
@@ -119,7 +118,28 @@ class ModelClient:
             store=False,
         )
         if response.output_parsed is None:
-            raise ValueError("Model did not return a structured response.")
+            incomplete_details = getattr(response, "incomplete_details", None)
+            usage = getattr(response, "usage", None)
+            output_token_details = getattr(usage, "output_tokens_details", None)
+            output_types = [
+                getattr(item, "type", "unknown")
+                for item in getattr(response, "output", [])
+            ]
+            content_types = [
+                getattr(content, "type", "unknown")
+                for item in getattr(response, "output", [])
+                for content in getattr(item, "content", [])
+            ]
+            raise ValueError(
+                "Model did not return a structured response. "
+                f"status={getattr(response, 'status', 'unknown')!r}, "
+                f"incomplete_reason={getattr(incomplete_details, 'reason', None)!r}, "
+                f"reasoning_tokens="
+                f"{getattr(output_token_details, 'reasoning_tokens', None)!r}, "
+                f"output_types={output_types!r}, "
+                f"content_types={content_types!r}, "
+                f"response_id={getattr(response, 'id', None)!r}."
+            )
         return response.output_parsed
 
 

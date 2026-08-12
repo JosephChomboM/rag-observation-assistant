@@ -36,25 +36,27 @@ Estas decisiones ya fueron discutidas y no deben cambiarse sin una nueva indicac
    - `Limites`
    - `Criticidad`
    - `Excepciones`
-6. Los identificadores se generan por orden de aparicion:
+   - `flag_on_wf`
+6. `flag_on_wf` es el interruptor por fila: `1` activa la fila, `0` (o celda vacia) la ignora por completo. Una fila desactivada no aparece en el Markdown del FileStore, ni en el `manifest.json`, ni en los embeddings de perfil, ni en la generacion de observaciones. Si todas las filas de una prueba estan en `0`, la prueba entera desaparece. Cualquier otro valor corta la carga con error.
+7. Los identificadores se generan por orden de aparicion:
    - `metod_id`: `BBDD1`
    - `prueba_id`: `BBDD1_P01`
    - `control_id`: `BBDD1_P01_C01`
-7. Se genera un Markdown por prueba, con sus controles como secciones internas.
-8. Se realiza una llamada LLM por prueba, no una llamada por control.
-9. La evidencia se carga por `METOD`; el usuario no crea carpetas por prueba o por control.
-10. El sistema recupera del pool del `METOD` la evidencia semanticamente relevante para cada prueba.
-11. El usuario puede cargar contexto compartido en `inputs/_global/`, por ejemplo:
+8. Se genera un Markdown por prueba, con sus controles como secciones internas.
+9. Se realiza una llamada LLM por prueba, no una llamada por control.
+10. La evidencia se carga por `METOD`; el usuario no crea carpetas por prueba o por control.
+11. El sistema recupera del pool del `METOD` la evidencia semanticamente relevante para cada prueba.
+12. El usuario puede cargar contexto compartido en `inputs/_global/`, por ejemplo:
     - un `.sas` que define target, `CODMES` y variables explicativas;
     - un `.txt` con contexto general del modelo.
-12. El contexto global ayuda a interpretar la evidencia, pero no demuestra por si mismo que un control se cumple o incumple.
-13. La criticidad final solo puede ser:
+13. El contexto global ayuda a interpretar la evidencia, pero no demuestra por si mismo que un control se cumple o incumple.
+14. La criticidad final solo puede ser:
     - `Critico`
     - `Relevante`
     - `Moderado`
     - `Baja`
     - `Potencial`
-14. Si no existe sustento suficiente:
+15. Si no existe sustento suficiente:
     - `hay_observacion` debe ser `false`;
     - `criticidad` debe ser `null`;
     - `observacion` debe ser una cadena vacia;
@@ -167,13 +169,14 @@ El flujo productivo actual utiliza solamente **Azure OpenAI**.
 - Generacion: deployment GPT-5.4 configurado en `.env`.
 - Valor comunicado para el deployment GPT-5.4: `OAIXXX05`.
 - Razonamiento: `reasoning={"effort": "high"}`.
+- Limite de generacion: `max_output_tokens=25000` para dejar espacio suficiente a los tokens de razonamiento y al JSON estructurado.
 - API: `OpenAI(...).responses.parse(...)` contra Azure OpenAI v1.
 - Multimodalidad: un mismo mensaje contiene `input_text`, cero o mas `input_file` y cero o mas `input_image`.
 - Archivos: PDF, DOCX, XLSX, CSV, HTML y codigo se suben en su formato original. Solo SAS se sube con extension `.txt`.
 - Transporte de archivos: `client.files.create(..., purpose="assistants")` y luego `input_file` con `file_id`. Cada archivo se sube una vez por ejecucion y su ID se reutiliza entre pruebas.
 - Imagenes: se envian como data URL base64.
 - Salida: Structured Outputs mediante `text_format=ObservationPayload` de Pydantic.
-- Embeddings: deployment Azure configurado por `DEPLOYMENT_EMB_SMALL` o `AZURE_OPENAI_EMBEDDING_DEPLOYMENT`.
+- Embeddings: deployment `text-embedding-3-small` configurado exclusivamente mediante `AZURE_OPENAI_EMBEDDING_DEPLOYMENT`.
 
 Claude y Databricks Model Serving ya no forman parte del flujo productivo. No reintroducir `mlflow.deployments`, providers seleccionables ni widgets de endpoints en los notebooks productivos.
 
@@ -189,8 +192,8 @@ Configuracion esperada:
 AZURE_OPENAI_API_KEY=<secreto>
 AZURE_OPENAI_ENDPOINT=https://<recurso>.openai.azure.com/
 
-DEPLOYMENT_AZURE=OAIXXX05
-DEPLOYMENT_EMB_SMALL=<deployment-de-embeddings>
+AZURE_OPENAI_CHAT_DEPLOYMENT=OAIXXX05
+AZURE_OPENAI_EMBEDDING_DEPLOYMENT=OAIXXX04
 
 SOFTIA_KNOWLEDGE_BASE_DIR=/dbfs/FileStore/gestor_obs/knowledge
 
@@ -204,10 +207,12 @@ SOFTIA_CHUNK_SIZE=1800
 SOFTIA_CHUNK_OVERLAP=200
 ```
 
-Compatibilidad de nombres:
+Cada variable identifica un unico deployment:
 
-- chat: primero `AZURE_OPENAI_CHAT_DEPLOYMENT`, luego `DEPLOYMENT_GPT54`, luego `DEPLOYMENT_AZURE`;
-- embeddings: primero `AZURE_OPENAI_EMBEDDING_DEPLOYMENT`, luego `DEPLOYMENT_EMB_SMALL`.
+- `AZURE_OPENAI_CHAT_DEPLOYMENT=OAIXXX05` apunta a GPT-5.4;
+- `AZURE_OPENAI_EMBEDDING_DEPLOYMENT=OAIXXX04` apunta a `text-embedding-3-small`.
+
+No existen aliases ni prioridades alternativas para estos deployments.
 
 `AZURE_OPENAI_API_VERSION` puede seguir existiendo en el `.env`, pero el cliente v1 implementado no lo consume.
 
@@ -275,11 +280,17 @@ La carpeta del usuario no se configura en `.env` ni en `config.py`. Se indica ob
     BBDD1/
       evidence_chunks_embeddings.jsonl
   outputs/
-    generated_observations/
-      BBDD1_run_YYYYMMDD_HHMMSS.json
-      BBDD1_run_YYYYMMDD_HHMMSS.md
-      retrieval_debug_BBDD1_run_YYYYMMDD_HHMMSS.jsonl
+    BBDD1_run_YYYYMMDD_HHMMSS.md
+  run_details/
+    BBDD1_run_YYYYMMDD_HHMMSS.json
+    retrieval_debug_BBDD1_run_YYYYMMDD_HHMMSS.jsonl
 ```
+
+`outputs/` es el entregable y contiene solo los Markdown. El JSON estructurado y el `retrieval_debug` viven en `run_details/`, fuera de `outputs/`. `indexes/` es cache de embeddings: se reutiliza entre corridas comparando `id`, hash del texto y deployment, de modo que solo se embebe la evidencia nueva o modificada. Cada corrida escribe archivos nuevos con su propio `run_id`; nada se sobrescribe.
+
+El `chunk_id` es `<METOD>_E<hash12>_C<parte>`, donde el hash se deriva de la ruta del archivo relativa a `inputs/<METOD>/` mas los metadatos que parten un archivo en varios documentos (pagina de PDF, hoja de Excel). Al no depender del orden alfabetico, agregar o borrar evidencia no invalida los embeddings de los demas archivos, y mover la carpeta del usuario tampoco.
+
+El arbol lo crea `prepare_user_workspace(metod_id, config)`, que se ejecuta en la celda **Preparar carpetas** del notebook 02 antes de cualquier llamada al modelo. Esa celda corta si falta el conocimiento admin del METOD o si `inputs/<METOD>/` esta vacio, para que el usuario copie su evidencia y vuelva a ejecutarla sin gastar tokens.
 
 El backend administrado puede usar cualquier nombre de carpeta y no se copia a los usuarios:
 
@@ -309,13 +320,14 @@ Proceso:
 2. Lee el Excel con `openpyxl`.
 3. Valida las columnas obligatorias de cada hoja.
 4. Aplica el forward-fill logico de `Detalle_prueba`.
-5. Agrupa filas en pruebas y controles.
-6. Genera IDs segun el orden encontrado.
-7. Escribe un Markdown por prueba.
-8. Escribe un `manifest.json` por `METOD`.
-9. Genera o reutiliza embeddings del glosario.
-10. Genera o reutiliza embeddings de perfiles de prueba.
-11. Guarda todos los embeddings administrados bajo `knowledge/_indexes/`.
+5. Descarta las filas con `flag_on_wf` desactivado.
+6. Agrupa filas en pruebas y controles.
+7. Genera IDs segun el orden encontrado, contando solo las filas activas.
+8. Escribe un Markdown por prueba.
+9. Escribe un `manifest.json` por `METOD`.
+10. Genera o reutiliza embeddings del glosario.
+11. Genera o reutiliza embeddings de perfiles de prueba.
+12. Guarda todos los embeddings administrados bajo `knowledge/_indexes/`.
 
 El cache compara `id`, hash del texto y nombre del deployment de embeddings. `rebuild_embeddings=false` es el uso normal. Debe reconstruirse cuando cambie el deployment.
 
@@ -416,7 +428,7 @@ El modelo Pydantic `ObservationPayload` exige:
   "evidencias_usadas": [
     {
       "archivo": "evidencia.sql",
-      "chunk_id": "BBDD1_E0001_C001",
+      "chunk_id": "BBDD1_E9e99d44c33b8_C001",
       "score": 0.82
     }
   ],

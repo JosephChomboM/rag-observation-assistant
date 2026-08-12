@@ -9,6 +9,8 @@ from openpyxl import load_workbook
 
 from .schemas import ControlSpec, PruebaSpec
 
+FLAG_COLUMN = "flag_on_wf"
+
 REQUIRED_COLUMNS = {
     "Detalle_prueba",
     "Detalle",
@@ -16,7 +18,11 @@ REQUIRED_COLUMNS = {
     "Limites",
     "Criticidad",
     "Excepciones",
+    FLAG_COLUMN,
 }
+
+ENABLED_FLAG_VALUES = {"1", "true", "si", "s", "x", "yes", "y", "verdadero"}
+DISABLED_FLAG_VALUES = {"", "0", "false", "no", "n", "falso"}
 
 
 def normalize_metod_id(sheet_name: str) -> str:
@@ -34,6 +40,28 @@ def safe_text(value: Any) -> str:
     if value is None:
         return ""
     return str(value).strip()
+
+
+def is_row_enabled(value: Any, sheet_name: str = "", row_number: int = 0) -> bool:
+    """Return True only when `flag_on_wf` marks the row as active.
+
+    A disabled row is treated as if it did not exist in the Excel: no markdown,
+    no manifest entry, no embedding and no observation.
+    """
+    if isinstance(value, bool):
+        return value
+
+    text = safe_text(value).lower()
+    if text.endswith(".0"):
+        text = text[:-2]
+    if text in ENABLED_FLAG_VALUES:
+        return True
+    if text in DISABLED_FLAG_VALUES:
+        return False
+    raise ValueError(
+        f"Invalid '{FLAG_COLUMN}' value {value!r} in sheet '{sheet_name}' row {row_number}. "
+        "Use 1 to activate the row or 0 to ignore it."
+    )
 
 
 def _headers(ws) -> dict[str, int]:
@@ -69,10 +97,10 @@ def load_pruebas_from_excel(
             raw_prueba = safe_text(row[headers["Detalle_prueba"]])
             if raw_prueba:
                 current_prueba = raw_prueba
-                if current_prueba not in rows_by_prueba:
-                    prueba_names.append(current_prueba)
-                    rows_by_prueba[current_prueba] = []
             if not current_prueba:
+                continue
+
+            if not is_row_enabled(row[headers[FLAG_COLUMN]], ws.title, row_number):
                 continue
 
             detalle = safe_text(row[headers["Detalle"]])
@@ -82,6 +110,10 @@ def load_pruebas_from_excel(
             excepciones = safe_text(row[headers["Excepciones"]])
             if not any([detalle, prompt, limites, criticidad, excepciones]):
                 continue
+
+            if current_prueba not in rows_by_prueba:
+                prueba_names.append(current_prueba)
+                rows_by_prueba[current_prueba] = []
 
             rows_by_prueba[current_prueba].append(
                 {
