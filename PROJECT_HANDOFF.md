@@ -56,11 +56,14 @@ Estas decisiones ya fueron discutidas y no deben cambiarse sin una nueva indicac
     - `Moderado`
     - `Baja`
     - `Potencial`
-15. Si no existe sustento suficiente:
-    - `hay_observacion` debe ser `false`;
-    - `criticidad` debe ser `null`;
-    - `observacion` debe ser una cadena vacia;
-    - `informacion_faltante` puede explicar que falta.
+15. Si no existe sustento suficiente (`sustento_suficiente=false`), la prueba se reporta como hallazgo critico, porque equivale a no haber presentado evidencia para esa prueba:
+    - `hay_observacion` se fuerza a `true`;
+    - `criticidad` se fuerza a `Critico`;
+    - `observacion` explica la falta de sustento;
+    - `informacion_faltante` detalla que evidencia falta;
+    - `controles_que_originan_observacion` cae en todos los controles evaluados si el modelo no precisa cuales.
+16. `hay_observacion=false` con `criticidad=null` queda reservado para el caso legitimo: hay evidencia suficiente y la prueba se cumple.
+17. Una corrida cubre un solo METOD. Si `inputs/<METOD>/` no tiene archivos soportados, `run_observation_pipeline` corta antes de crear el cliente del modelo. El contenido de `inputs/_global/` no sustituye a la evidencia del METOD.
 
 ## 3. Separacion admin/usuario
 
@@ -281,16 +284,13 @@ La carpeta del usuario no se configura en `.env` ni en `config.py`. Se indica ob
       evidence_chunks_embeddings.jsonl
   outputs/
     BBDD1_run_YYYYMMDD_HHMMSS.md
-  run_details/
-    BBDD1_run_YYYYMMDD_HHMMSS.json
-    retrieval_debug_BBDD1_run_YYYYMMDD_HHMMSS.jsonl
 ```
 
-`outputs/` es el entregable y contiene solo los Markdown. El JSON estructurado y el `retrieval_debug` viven en `run_details/`, fuera de `outputs/`. `indexes/` es cache de embeddings: se reutiliza entre corridas comparando `id`, hash del texto y deployment, de modo que solo se embebe la evidencia nueva o modificada. Cada corrida escribe archivos nuevos con su propio `run_id`; nada se sobrescribe.
+`outputs/` es el entregable y contiene solo los Markdown: el Markdown es el unico archivo que una corrida deja en disco. El payload estructurado, el `usage_summary` y el `retrieval_debug` vuelven en memoria dentro del `result` de `run_observation_pipeline`, para inspeccionarlos en el notebook. `indexes/` es cache de embeddings: se reutiliza entre corridas comparando `id`, hash del texto y deployment, de modo que solo se embebe la evidencia nueva o modificada. Cada corrida escribe archivos nuevos con su propio `run_id`; nada se sobrescribe.
 
 El `chunk_id` es `<METOD>_E<hash12>_C<parte>`, donde el hash se deriva de la ruta del archivo relativa a `inputs/<METOD>/` mas los metadatos que parten un archivo en varios documentos (pagina de PDF, hoja de Excel). Al no depender del orden alfabetico, agregar o borrar evidencia no invalida los embeddings de los demas archivos, y mover la carpeta del usuario tampoco.
 
-El arbol lo crea `prepare_user_workspace(metod_id, config)`, que se ejecuta en la celda **Preparar carpetas** del notebook 02 antes de cualquier llamada al modelo. Esa celda corta si falta el conocimiento admin del METOD o si `inputs/<METOD>/` esta vacio, para que el usuario copie su evidencia y vuelva a ejecutarla sin gastar tokens.
+`prepare_user_workspace(metod_id, config)`, en la celda **Preparar carpetas de entrada** del notebook 02, crea unicamente `inputs/<METOD>/` e `inputs/_global/`, que son las carpetas que el usuario llena a mano. `indexes/` y `outputs/` los crea la propia corrida.
 
 El backend administrado puede usar cualquier nombre de carpeta y no se copia a los usuarios:
 
@@ -438,7 +438,8 @@ El modelo Pydantic `ObservationPayload` exige:
 
 Pydantic rechaza criticidades fuera del enum. Despues, `validate_observation_payload()` aplica las reglas de negocio restantes:
 
-- fuerza la criticidad a `null` cuando no hay observacion;
+- si `sustento_suficiente=false`, fuerza `hay_observacion=true` y `criticidad=Critico`, y completa el texto de observacion y la informacion faltante;
+- en el resto de casos fuerza la criticidad a `null` cuando no hay observacion;
 - limpia el texto de observacion cuando no hay hallazgo;
 - elimina IDs de controles que no pertenecen a la prueba;
 - completa `controles_evaluados` con todos los controles si el modelo no los entrega.
@@ -577,7 +578,7 @@ Detalles a vigilar:
     - `inputs/<METOD>/`;
     - `inputs/_global/` si aplica.
 9. Antes de distribuir el notebook, configurar `BACKEND_PROJECT_DIR` con la ruta de la carpeta administrativa; luego ejecutar `02_generate_observations_by_prueba.py`.
-10. Revisar el JSON final, el Markdown y especialmente `retrieval_debug_*.jsonl`.
+10. Revisar el Markdown y, en el notebook, `result["retrieval_debug"]` y `result["usage_summary"]`.
 11. Antes de ampliar funcionalidad, resolver los pendientes de prioridad alta.
 
 ## 19. Instrucciones para el siguiente Codex

@@ -18,9 +18,16 @@ Eres un validador metodologico.
 - Usa el contexto global para interpretar variables y parametros; no lo trates como evidencia de cumplimiento o incumplimiento.
 - No incluyas archivos de contexto global en evidencias_usadas.
 - Usa solamente los IDs de controles y evidencias proporcionados en la solicitud.
-- Si no hay sustento suficiente, devuelve hay_observacion=false, criticidad=null y observacion="".
+- sustento_suficiente indica si la evidencia recuperada alcanza para evaluar la prueba.
+- Si no alcanza, devuelve sustento_suficiente=false y detalla en informacion_faltante que evidencia falta. La prueba se reporta como Critico automaticamente: no inventes un hallazgo para justificarlo.
+- Si alcanza y la prueba se cumple, devuelve sustento_suficiente=true, hay_observacion=false, criticidad=null y observacion="".
 - Cumple estrictamente el esquema de salida solicitado.
 """.strip()
+
+SIN_SUSTENTO_OBSERVACION = (
+    "No se presento evidencia suficiente para evaluar esta prueba. "
+    "Se reporta como Critico por falta de sustento."
+)
 
 
 def validate_observation_payload(
@@ -33,6 +40,23 @@ def validate_observation_payload(
 
     controles_evaluados = [control for control in controles_evaluados if control in controles_validos]
     controles_origen = [control for control in controles_origen if control in controles_validos]
+    controles_evaluados = controles_evaluados or [c.control_id for c in prueba.controls]
+
+    if not parsed.sustento_suficiente:
+        # Sin evidencia que la sustente, la prueba se trata como si no se
+        # hubieran presentado inputs: observacion Critica, no un "sin hallazgo".
+        return ObservationResult(
+            prueba_id=prueba.prueba_id,
+            nombre_prueba=prueba.nombre_prueba,
+            hay_observacion=True,
+            criticidad="Critico",
+            observacion=parsed.observacion or SIN_SUSTENTO_OBSERVACION,
+            sustento=parsed.sustento,
+            controles_evaluados=controles_evaluados,
+            controles_que_originan_observacion=controles_origen or controles_evaluados,
+            evidencias_usadas=[item.model_dump() for item in parsed.evidencias_usadas],
+            informacion_faltante=parsed.informacion_faltante or [SIN_SUSTENTO_OBSERVACION],
+        )
 
     return ObservationResult(
         prueba_id=prueba.prueba_id,
@@ -41,7 +65,7 @@ def validate_observation_payload(
         criticidad=parsed.criticidad if parsed.hay_observacion else None,
         observacion=parsed.observacion if parsed.hay_observacion else "",
         sustento=parsed.sustento,
-        controles_evaluados=controles_evaluados or [c.control_id for c in prueba.controls],
+        controles_evaluados=controles_evaluados,
         controles_que_originan_observacion=controles_origen,
         evidencias_usadas=[item.model_dump() for item in parsed.evidencias_usadas],
         informacion_faltante=parsed.informacion_faltante,

@@ -11,7 +11,6 @@ class AppConfig:
     outputs_base_dir: str
     embedding_deployment: str
     chat_deployment: str
-    run_details_dir: str = ""
     reasoning_effort: str = "high"
     top_k_evidence: int = 8
     top_k_global_context: int = 4
@@ -70,18 +69,6 @@ def load_config(env_path: str = ".env") -> AppConfig:
         enable_rerank=os.getenv("SOFTIA_ENABLE_RERANK", "false").strip().lower() == "true",
         rerank_min_relevance=int(os.getenv("SOFTIA_RERANK_MIN_RELEVANCE", "1")),
     )
-
-
-def resolve_run_details_dir(config: AppConfig) -> str:
-    """Folder for run artifacts that are not the deliverable markdown.
-
-    `outputs_base_dir` must contain only the observation markdown files, so the
-    run JSON and the retrieval debug land here instead.
-    """
-    if config.run_details_dir:
-        return config.run_details_dir
-    outputs_dir = os.path.normpath(config.outputs_base_dir)
-    return os.path.join(os.path.dirname(outputs_dir), "run_details")
 
 
 def metod_paths(config: AppConfig, metod_id: str) -> dict[str, str]:

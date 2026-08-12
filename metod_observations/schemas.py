@@ -18,6 +18,7 @@ class EvidenceReference(BaseModel):
 class ObservationPayload(BaseModel):
     prueba_id: str
     nombre_prueba: str
+    sustento_suficiente: bool
     hay_observacion: bool
     criticidad: Criticality | None
     observacion: str

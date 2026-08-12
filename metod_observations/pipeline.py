@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .chunking import build_evidence_chunks
-from .config import AppConfig, load_config, metod_paths, resolve_run_details_dir
+from .config import AppConfig, load_config, metod_paths
 from .embeddings import EmbeddingStats, ModelClient, embed_rows_with_cache
 from .excel_loader import load_pruebas_from_excel
 from .io_utils import ensure_dir, read_json, read_jsonl, write_jsonl
@@ -472,21 +472,14 @@ def _prompt_file_attachments(
 def prepare_user_workspace(
     metod_id: str,
     config: AppConfig | None = None,
-) -> dict[str, Any]:
-    """Create the user folder tree and report what is still missing.
+) -> dict[str, str]:
+    """Create the input folders so the user can drop the evidence in.
 
-    Run this before `run_observation_pipeline`: it creates the empty folders so
-    the user can drop the evidence in, and reports whether the METOD folder
-    already has supported files. It never calls the model.
+    Only the folders the user has to fill by hand. Everything the run produces
+    (indexes, outputs, run details) is created by `run_observation_pipeline`.
     """
     active_config = config or load_config()
-    if not all(
-        [
-            active_config.inputs_base_dir,
-            active_config.indexes_base_dir,
-            active_config.outputs_base_dir,
-        ]
-    ):
+    if not active_config.inputs_base_dir:
         raise ValueError(
             "Missing user workspace paths. Set user_base_dir in "
             "gestor_observaciones/02_generate_observations_by_prueba.py."
@@ -494,40 +487,13 @@ def prepare_user_workspace(
 
     clean_metod = metod_id.strip().upper()
     paths = metod_paths(active_config, clean_metod)
-    run_details_dir = resolve_run_details_dir(active_config)
-    for folder in (
-        paths["input_dir"],
-        paths["global_input_dir"],
-        paths["index_dir"],
-        paths["global_index_dir"],
-        active_config.outputs_base_dir,
-        run_details_dir,
-    ):
-        ensure_dir(folder)
-
-    evidence_files = list_evidence_files(paths["input_dir"])
-    global_files = list_evidence_files(paths["global_input_dir"])
-    missing_knowledge = [
-        path
-        for path in (
-            paths["manifest_path"],
-            paths["profile_index_path"],
-            paths["glossary_index_path"],
-        )
-        if not os.path.exists(path)
-    ]
+    ensure_dir(paths["input_dir"])
+    ensure_dir(paths["global_input_dir"])
 
     return {
         "metod_id": clean_metod,
         "input_dir": paths["input_dir"],
         "global_input_dir": paths["global_input_dir"],
-        "index_dir": paths["index_dir"],
-        "outputs_dir": active_config.outputs_base_dir,
-        "run_details_dir": run_details_dir,
-        "evidence_files": evidence_files,
-        "global_context_files": global_files,
-        "missing_admin_knowledge": missing_knowledge,
-        "ready": bool(evidence_files) and not missing_knowledge,
     }
 
 
@@ -556,7 +522,16 @@ def run_observation_pipeline(
     ensure_dir(paths["index_dir"])
     ensure_dir(paths["global_index_dir"])
     ensure_dir(active_config.outputs_base_dir)
-    ensure_dir(resolve_run_details_dir(active_config))
+
+    # A run covers a single METOD, so its evidence folder is mandatory. The
+    # shared context in inputs/_global/ never replaces it: without METOD
+    # evidence there is nothing to validate and the run would only burn tokens.
+    if not list_evidence_files(paths["input_dir"]):
+        raise FileNotFoundError(
+            f"No evidence for {clean_metod} in {paths['input_dir']}. "
+            "Copy the METOD files there before generating observations. "
+            "Files in inputs/_global/ do not replace the METOD evidence."
+        )
 
     if not os.path.exists(paths["manifest_path"]):
         raise FileNotFoundError(
@@ -782,12 +757,9 @@ def run_observation_pipeline(
     }
     output_paths = save_run_outputs(
         active_config.outputs_base_dir,
-        resolve_run_details_dir(active_config),
         clean_metod,
         run_id,
         observations,
-        retrieval_debug_rows,
-        usage_summary,
     )
     result = {
         "metod_id": clean_metod,
@@ -795,6 +767,7 @@ def run_observation_pipeline(
         "output_paths": output_paths,
         "usage_summary": usage_summary,
         "observations": [observation.to_dict() for observation in observations],
+        "retrieval_debug": retrieval_debug_rows,
     }
     for file_id, _ in uploaded_files.values():
         client.delete_input_file(file_id)

@@ -16,15 +16,14 @@ The pipeline reads:
 
 And writes:
 - the observation markdown to <user_base_dir>/outputs/
-- the run JSON and retrieval debug to <user_base_dir>/run_details/
 - the embedding cache to <user_base_dir>/indexes/
 
-Every run writes new files stamped with its own run_id, so previous runs are
-never overwritten.
+The markdown is the only file a run leaves on disk. Each run stamps it with its
+own run_id, so previous runs are never overwritten. The structured payload, the
+usage summary and the retrieval debug come back in `result`, in memory.
 
-Run the cells in order: the "Preparar carpetas" cell creates the folder tree and
-stops if the METOD folder has no evidence yet, so nothing is sent to the model
-until the evidence is in place.
+Run the cells in order: the "Preparar carpetas de entrada" cell only creates the
+folders the user has to fill; the run creates everything else.
 
 Model deployments, reasoning, retrieval and chunking settings come from .env.
 """
@@ -95,7 +94,6 @@ config = replace(
     inputs_base_dir=os.path.join(user_base_dir, "inputs"),
     indexes_base_dir=os.path.join(user_base_dir, "indexes"),
     outputs_base_dir=os.path.join(user_base_dir, "outputs"),
-    run_details_dir=os.path.join(user_base_dir, "run_details"),
 )
 
 print("METOD:", metod_id)
@@ -104,41 +102,19 @@ print("Deployment text-embedding-3-small:", config.embedding_deployment)
 print("Evidencias:", os.path.join(config.inputs_base_dir, metod_id))
 print("Contexto global:", os.path.join(config.inputs_base_dir, "_global"))
 print("Resultados (solo markdown):", config.outputs_base_dir)
-print("Detalle de corrida:", config.run_details_dir)
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Preparar carpetas
-# MAGIC Crea el arbol de trabajo y verifica que haya evidencia antes de gastar tokens.
-# MAGIC Si la celda corta, copia tus archivos en la carpeta indicada y vuelve a ejecutarla.
+# MAGIC ## Preparar carpetas de entrada
+# MAGIC Crea las carpetas donde copias tus archivos. El resto lo crea la corrida.
 
 # COMMAND ----------
 
 workspace = prepare_user_workspace(metod_id=metod_id, config=config)
 
-print("Evidencia en", workspace["input_dir"], ":", len(workspace["evidence_files"]), "archivo(s)")
-print(
-    "Contexto global en",
-    workspace["global_input_dir"],
-    ":",
-    len(workspace["global_context_files"]),
-    "archivo(s)",
-)
-
-if workspace["missing_admin_knowledge"]:
-    raise FileNotFoundError(
-        "Falta conocimiento admin para "
-        f"{metod_id}: {workspace['missing_admin_knowledge']}. "
-        "Pide al administrador que ejecute 01_admin_build_knowledge.py."
-    )
-
-if not workspace["evidence_files"]:
-    raise FileNotFoundError(
-        "Carpetas creadas, pero no hay evidencia para "
-        f"{metod_id}. Copia tus archivos en {workspace['input_dir']} "
-        "y vuelve a ejecutar esta celda antes de generar observaciones."
-    )
+print("Copia la evidencia del METOD en:", workspace["input_dir"])
+print("Copia el contexto compartido en:", workspace["global_input_dir"])
 
 # COMMAND ----------
 

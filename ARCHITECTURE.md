@@ -55,7 +55,7 @@ Esto es validacion metodologica de modelos. Una observacion de criticidad `Criti
 RAG produce ese rastro de auditoria como subproducto natural de la arquitectura:
 
 - `evidencias_usadas` en la salida estructurada obliga al modelo a citar `archivo`, `chunk_id` y `score`;
-- `retrieval_debug_<run_id>.jsonl` registra, por prueba, **todo** lo que se recupero: score, modo de retrieval, que canal lo encontro (`found_by`), relevancia del rerank, si se adjunto como archivo o imagen.
+- `result["retrieval_debug"]` registra, por prueba, **todo** lo que se recupero: score, modo de retrieval, que canal lo encontro (`found_by`), relevancia del rerank, si se adjunto como archivo o imagen. Por decision del usuario ya no se persiste en disco: vive solo en el objeto que devuelve la corrida, asi que se inspecciona en el notebook o se pierde al terminar la sesion.
 
 Con contexto largo indiferenciado no existe forma de reconstruir que pasaje sustento un hallazgo. El modelo dice "segun la evidencia" y no hay nada que auditar. **La observabilidad del retrieval es lo que hace este sistema defendible ante un auditor**, y por eso el modulo se llama `retrieval_debug` y no es opcional.
 
@@ -67,7 +67,8 @@ Contraintuitivo pero central. La tarea no es "resumir el corpus", es **decidir s
 
 Un chunk irrelevante que menciona superficialmente el tema de la prueba puede inducir al modelo a fabricar un hallazgo. Por eso el sistema es explicitamente conservador:
 
-- si no hay sustento suficiente, `hay_observacion=false`, `criticidad=null`, `observacion=""`;
+- si no hay sustento suficiente (`sustento_suficiente=false`), la prueba se reporta como `Critico`: falta de evidencia equivale a incumplimiento, no a ausencia de hallazgo;
+- `hay_observacion=false` con `criticidad=null` solo aplica cuando hay evidencia suficiente y la prueba se cumple;
 - el reranker descarta todo lo que este por debajo de `rerank_min_relevance` **en lugar de rellenar el top-k**, precisamente para que un chunk irrelevante no llegue al generador solo por completar cupo (ver `reranking.py:60-63`).
 
 Un falso positivo en este dominio cuesta horas de revision humana y erosiona la confianza en el sistema. Filtrar es mas valioso que incluir.
@@ -173,7 +174,7 @@ flowchart TB
         IN2[("inputs/_global/<br/>contexto del modelo")]
         NB2["02_generate_observations_by_prueba.py"]
         IDX[("indexes/*.jsonl<br/>chunks + embeddings<br/>cache por hash")]
-        OUT[("outputs/<br/>solo MD<br/>run_details/: JSON + retrieval_debug")]
+        OUT[("outputs/<br/>solo MD")]
 
         IN1 --> NB2
         IN2 --> NB2
@@ -289,10 +290,10 @@ sequenceDiagram
     M-->>P: ObservationPayload (JSON validado por Pydantic)
 
     P->>V: reglas de negocio
-    Note right of V: criticidad=null si no hay observacion<br/>limpia texto si no hay hallazgo<br/>elimina control_id ajenos a la prueba<br/>completa controles_evaluados
+    Note right of V: sin sustento => Critico forzado<br/>criticidad=null si cumple sin hallazgo<br/>elimina control_id ajenos a la prueba<br/>completa controles_evaluados
 
     V-->>P: observacion validada
-    P->>O: JSON + Markdown + retrieval_debug.jsonl
+    P->>O: Markdown (unico archivo persistido)
 
     Note over P: al terminar todas las pruebas
     P->>F: delete file_id (limpieza)
@@ -307,9 +308,9 @@ sequenceDiagram
 | Artefacto | Ubicacion | Contenido | Para quien |
 |---|---|---|---|
 | `<METOD>_run_<ts>.md` | `outputs/` | Version legible | Revisor humano |
-| `<METOD>_run_<ts>.json` | `run_details/` | Observaciones estructuradas por prueba | Consumo programatico / downstream |
-| `retrieval_debug_<METOD>_run_<ts>.jsonl` | `run_details/` | Por prueba y por chunk: `score`, `retrieval_mode`, `found_by`, `rerank_relevance`, `sent_as_prompt_file`, `sent_as_prompt_image` | **Auditoria y depuracion del retrieval** |
-| `usage_summary` | dentro del JSON | Chunks, embeddings creados vs reutilizados, requests de generacion y de rerank, archivos subidos y omitidos por tamano | Control de costo |
+| `result["observations"]` | memoria | Observaciones estructuradas por prueba | Consumo programatico / downstream |
+| `result["retrieval_debug"]` | memoria | Por prueba y por chunk: `score`, `retrieval_mode`, `found_by`, `rerank_relevance`, `sent_as_prompt_file`, `sent_as_prompt_image` | **Auditoria y depuracion del retrieval** |
+| `result["usage_summary"]` | memoria | Chunks, embeddings creados vs reutilizados, requests de generacion y de rerank, archivos subidos y omitidos por tamano | Control de costo |
 
 El tercero es el que convierte esto en un sistema de ingenieria y no en una demo: permite separar fallos de retrieval de fallos de generacion.
 

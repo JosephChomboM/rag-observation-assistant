@@ -3,9 +3,8 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
-from .io_utils import ensure_dir, write_json, write_jsonl
+from .io_utils import ensure_dir
 from .schemas import ObservationResult
 
 
@@ -47,38 +46,16 @@ def observations_to_markdown(metod_id: str, run_id: str, observations: list[Obse
 
 def save_run_outputs(
     outputs_base_dir: str | Path,
-    run_details_dir: str | Path,
     metod_id: str,
     run_id: str,
     observations: list[ObservationResult],
-    retrieval_debug_rows: list[dict[str, Any]],
-    usage_summary: dict[str, Any],
 ) -> dict[str, str]:
-    """Write the markdown to `outputs_base_dir` and everything else elsewhere.
+    """Write the observation markdown. It is the only file a run leaves on disk.
 
-    `outputs_base_dir` is the user-facing deliverable folder and must hold only
-    the observation markdown. The run JSON and the retrieval debug go to
-    `run_details_dir`.
+    The structured payload, the usage summary and the retrieval debug stay in
+    the object returned by `run_observation_pipeline`.
     """
     ensure_dir(outputs_base_dir)
-    ensure_dir(run_details_dir)
-    base = Path(outputs_base_dir)
-    details = Path(run_details_dir)
-    payload = {
-        "metod_id": metod_id,
-        "run_id": run_id,
-        "usage_summary": usage_summary,
-        "pruebas": [observation.to_dict() for observation in observations],
-    }
-    md_path = base / f"{run_id}.md"
-    json_path = details / f"{run_id}.json"
-    debug_path = details / f"retrieval_debug_{run_id}.jsonl"
-
-    write_json(json_path, payload)
+    md_path = Path(outputs_base_dir) / f"{run_id}.md"
     md_path.write_text(observations_to_markdown(metod_id, run_id, observations), encoding="utf-8")
-    write_jsonl(debug_path, retrieval_debug_rows)
-    return {
-        "json": os.fspath(json_path),
-        "markdown": os.fspath(md_path),
-        "retrieval_debug": os.fspath(debug_path),
-    }
+    return {"markdown": os.fspath(md_path)}
