@@ -3,6 +3,7 @@
 import base64
 import mimetypes
 import os
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -470,13 +471,14 @@ def _prompt_file_attachments(
 
 
 def prepare_user_workspace(
-    metod_id: str,
+    metod_ids: str | Iterable[str],
     config: AppConfig | None = None,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Create the input folders so the user can drop the evidence in.
 
-    Only the folders the user has to fill by hand. Everything the run produces
-    (indexes, outputs, run details) is created by `run_observation_pipeline`.
+    Creates one folder per METOD plus the shared `_global` one, no matter which
+    METOD the run will use. Only the folders the user fills by hand: everything
+    a run produces (indexes, outputs) is created by `run_observation_pipeline`.
     """
     active_config = config or load_config()
     if not active_config.inputs_base_dir:
@@ -485,15 +487,27 @@ def prepare_user_workspace(
             "gestor_observaciones/02_generate_observations_by_prueba.py."
         )
 
-    clean_metod = metod_id.strip().upper()
-    paths = metod_paths(active_config, clean_metod)
-    ensure_dir(paths["input_dir"])
-    ensure_dir(paths["global_input_dir"])
+    requested = [metod_ids] if isinstance(metod_ids, str) else list(metod_ids)
+    clean_metods: list[str] = []
+    for metod_id in requested:
+        clean_metod = metod_id.strip().upper()
+        if clean_metod and clean_metod not in clean_metods:
+            clean_metods.append(clean_metod)
+    if not clean_metods:
+        raise ValueError("No METOD ids were provided.")
+
+    input_dirs = {
+        clean_metod: metod_paths(active_config, clean_metod)["input_dir"]
+        for clean_metod in clean_metods
+    }
+    global_input_dir = os.path.join(active_config.inputs_base_dir, "_global")
+    for folder in (*input_dirs.values(), global_input_dir):
+        ensure_dir(folder)
 
     return {
-        "metod_id": clean_metod,
-        "input_dir": paths["input_dir"],
-        "global_input_dir": paths["global_input_dir"],
+        "metod_ids": clean_metods,
+        "input_dirs": input_dirs,
+        "global_input_dir": global_input_dir,
     }
 
 

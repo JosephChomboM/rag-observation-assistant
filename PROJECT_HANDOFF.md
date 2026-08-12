@@ -290,7 +290,7 @@ La carpeta del usuario no se configura en `.env` ni en `config.py`. Se indica ob
 
 El `chunk_id` es `<METOD>_E<hash12>_C<parte>`, donde el hash se deriva de la ruta del archivo relativa a `inputs/<METOD>/` mas los metadatos que parten un archivo en varios documentos (pagina de PDF, hoja de Excel). Al no depender del orden alfabetico, agregar o borrar evidencia no invalida los embeddings de los demas archivos, y mover la carpeta del usuario tampoco.
 
-`prepare_user_workspace(metod_id, config)`, en la celda **Preparar carpetas de entrada** del notebook 02, crea unicamente `inputs/<METOD>/` e `inputs/_global/`, que son las carpetas que el usuario llena a mano. `indexes/` y `outputs/` los crea la propia corrida.
+`prepare_user_workspace(metod_ids, config)`, en la celda **Preparar carpetas de entrada** del notebook 02, crea una carpeta `inputs/<METOD>/` por cada METOD de la constante `METOD_IDS` mas `inputs/_global/`. Son las unicas carpetas que el usuario llena a mano; `indexes/` y `outputs/` los crea la propia corrida. `METOD_IDS` se define arriba en el notebook y debe mantenerse alineada con las hojas del Excel maestro. La corrida sigue siendo de un solo METOD, el del widget `metod_id`.
 
 El backend administrado puede usar cualquier nombre de carpeta y no se copia a los usuarios:
 

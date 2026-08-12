@@ -22,8 +22,9 @@ The markdown is the only file a run leaves on disk. Each run stamps it with its
 own run_id, so previous runs are never overwritten. The structured payload, the
 usage summary and the retrieval debug come back in `result`, in memory.
 
-Run the cells in order: the "Preparar carpetas de entrada" cell only creates the
-folders the user has to fill; the run creates everything else.
+Run the cells in order: the "Preparar carpetas de entrada" cell creates one input
+folder per METOD in METOD_IDS plus the shared one, and nothing else. The run
+covers the single METOD picked in the widget and creates whatever it needs.
 
 Model deployments, reasoning, retrieval and chunking settings come from .env.
 """
@@ -42,6 +43,11 @@ from dotenv import load_dotenv
 # Configure this path before distributing the notebook to users.
 # The folder must contain metod_observations/ and the .env file.
 BACKEND_PROJECT_DIR = "/Workspace/Users/<admin>/<cualquier_nombre>"
+
+# Every METOD the user can run. The prepare cell creates one input folder for
+# each, so the user sees the full set at once. Keep it in sync with the sheets
+# of the master Excel.
+METOD_IDS = ["BBDD1", "BBDD2", *(f"METOD{number}" for number in range(1, 9))]
 
 try:
     dbutils.widgets.text("metod_id", "BBDD1", "METOD")
@@ -107,14 +113,16 @@ print("Resultados (solo markdown):", config.outputs_base_dir)
 
 # MAGIC %md
 # MAGIC ## Preparar carpetas de entrada
-# MAGIC Crea las carpetas donde copias tus archivos. El resto lo crea la corrida.
+# MAGIC Crea la carpeta de todos los METOD y la compartida. El resto lo crea la corrida.
 
 # COMMAND ----------
 
-workspace = prepare_user_workspace(metod_id=metod_id, config=config)
+workspace = prepare_user_workspace(METOD_IDS, config=config)
 
-print("Copia la evidencia del METOD en:", workspace["input_dir"])
-print("Copia el contexto compartido en:", workspace["global_input_dir"])
+print("Contexto compartido para todos los METOD:", workspace["global_input_dir"])
+print("Evidencia por METOD:")
+for metod, input_dir in workspace["input_dirs"].items():
+    print(f"  {metod}: {input_dir}")
 
 # COMMAND ----------
 
