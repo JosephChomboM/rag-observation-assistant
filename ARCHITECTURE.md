@@ -10,7 +10,7 @@
 
 ### 1.1 El problema real
 
-El sistema debe generar una **observacion metodologica por prueba**, donde cada prueba agrupa varios controles. Para cada prueba hay que decidir:
+El sistema debe generar una **observacion metodologica por control**, donde la prueba agrupa varios controles solo para leerlos juntos. Para cada control hay que decidir:
 
 - si hay o no hallazgo (`hay_observacion`);
 - con que criticidad (`Critico`, `Relevante`, `Moderado`, `Baja`, `Potencial`);
@@ -35,14 +35,14 @@ Solo queda inyeccion de contexto en tiempo de ejecucion. Eso *es* RAG.
 
 Este es el argumento cuantitativo y el mas dificil de refutar.
 
-El diseno hace **una llamada LLM por prueba** (decision deliberada: los controles de una prueba se evaluan en conjunto porque comparten evidencia). Si `P` = numero de pruebas de un METOD y `T` = tokens del corpus completo de evidencia:
+El diseno hace **una llamada LLM por control** (decision del usuario: cada control se evalua por separado y recupera su propia evidencia). Si `P` = numero de controles de un METOD y `T` = tokens del corpus completo de evidencia:
 
 | Estrategia | Tokens de entrada facturados |
 |---|---|
 | Meter todo el corpus en cada llamada | `P × T` |
-| RAG (top-k por prueba) | `P × k×chunk_size` + `T` embebido **una sola vez** |
+| RAG (top-k por control) | `P × k×chunk_size` + `T` embebido **una sola vez** |
 
-Con `SOFTIA_CHUNK_SIZE=1800` y `SOFTIA_TOP_K_EVIDENCE=8`, el contexto recuperado por prueba queda acotado a ~14K caracteres **independientemente de si el usuario subio 5 archivos o 500**. El corpus completo se embebe una vez, se cachea por hash (`embed_rows_with_cache`) y se reutiliza mientras el archivo no cambie.
+Con `SOFTIA_CHUNK_SIZE=1800` y `SOFTIA_TOP_K_EVIDENCE=8`, el contexto recuperado por control queda acotado a ~14K caracteres **independientemente de si el usuario subio 5 archivos o 500**. El corpus completo se embebe una vez, se cachea por hash (`embed_rows_with_cache`) y se reutiliza mientras el archivo no cambie.
 
 El punto clave: **el costo de RAG es sublineal respecto al tamano del corpus; el de stuffing es lineal y ademas multiplicado por P.** Con `reasoning={"effort": "high"}`, cada token de entrada compite ademas con el presupuesto de razonamiento dentro de `max_output_tokens=25000`.
 
@@ -55,7 +55,7 @@ Esto es validacion metodologica de modelos. Una observacion de criticidad `Criti
 RAG produce ese rastro de auditoria como subproducto natural de la arquitectura:
 
 - `evidencias_usadas` en la salida estructurada obliga al modelo a citar `archivo`, `chunk_id` y `score`;
-- `result["retrieval_debug"]` registra, por prueba, **todo** lo que se recupero: score, modo de retrieval, que canal lo encontro (`found_by`), relevancia del rerank, si se adjunto como archivo o imagen. Por decision del usuario ya no se persiste en disco: vive solo en el objeto que devuelve la corrida, asi que se inspecciona en el notebook o se pierde al terminar la sesion.
+- `result["retrieval_debug"]` registra, por control, **todo** lo que se recupero: score, modo de retrieval, que canal lo encontro (`found_by`), relevancia del rerank, si se adjunto como archivo o imagen. Por decision del usuario ya no se persiste en disco: vive solo en el objeto que devuelve la corrida, asi que se inspecciona en el notebook o se pierde al terminar la sesion.
 
 Con contexto largo indiferenciado no existe forma de reconstruir que pasaje sustento un hallazgo. El modelo dice "segun la evidencia" y no hay nada que auditar. **La observabilidad del retrieval es lo que hace este sistema defendible ante un auditor**, y por eso el modulo se llama `retrieval_debug` y no es opcional.
 
@@ -65,10 +65,10 @@ Corolario operativo: cuando la salida es mala, el debug permite distinguir un fa
 
 Contraintuitivo pero central. La tarea no es "resumir el corpus", es **decidir si un control especifico se incumple**. Es una tarea de deteccion, y en deteccion el ruido produce falsos positivos.
 
-Un chunk irrelevante que menciona superficialmente el tema de la prueba puede inducir al modelo a fabricar un hallazgo. Por eso el sistema es explicitamente conservador:
+Un chunk irrelevante que menciona superficialmente el tema del control puede inducir al modelo a fabricar un hallazgo. Por eso el sistema es explicitamente conservador:
 
-- si no hay sustento suficiente (`sustento_suficiente=false`), la prueba se reporta como `Critico`: falta de evidencia equivale a incumplimiento, no a ausencia de hallazgo;
-- `hay_observacion=false` con `criticidad=null` solo aplica cuando hay evidencia suficiente y la prueba se cumple;
+- si no hay sustento suficiente (`sustento_suficiente=false`), el control se reporta como `Critico`: falta de evidencia equivale a incumplimiento, no a ausencia de hallazgo;
+- `hay_observacion=false` con `criticidad=null` solo aplica cuando hay evidencia suficiente y el control se cumple;
 - el reranker descarta todo lo que este por debajo de `rerank_min_relevance` **en lugar de rellenar el top-k**, precisamente para que un chunk irrelevante no llegue al generador solo por completar cupo (ver `reranking.py:60-63`).
 
 Un falso positivo en este dominio cuesta horas de revision humana y erosiona la confianza en el sistema. Filtrar es mas valioso que incluir.
@@ -79,12 +79,12 @@ Esta es la defensa que desactiva la critica mas comun ("estas usando RAG como ma
 
 | Informacion | Mecanismo | Por que |
 |---|---|---|
-| Detalle del control, prompt, limites, criticidad, excepciones, lista de controles esperados | **Lookup deterministico** desde `manifest.json` y el Markdown de la prueba | El sistema ya sabe exactamente que prueba evalua. Recuperar semanticamente una regla que se conoce por ID seria introducir un error probabilistico donde hay certeza. |
-| Que fragmentos de la evidencia del usuario aplican a esta prueba | **RAG** | Genuinamente desconocido en tiempo de ejecucion. |
-| Que contexto global del modelo aplica a esta prueba | **RAG** | Idem. |
+| Detalle del control, prompt, limites, criticidad, excepciones | **Lookup deterministico** desde `manifest.json` | El sistema ya sabe exactamente que control evalua. Recuperar semanticamente una regla que se conoce por ID seria introducir un error probabilistico donde hay certeza. |
+| Que fragmentos de la evidencia del usuario aplican a este control | **RAG** | Genuinamente desconocido en tiempo de ejecucion. |
+| Que contexto global del modelo aplica a este control | **RAG** | Idem. |
 | Que terminos del glosario son relevantes | **Hibrido**: match exacto de termino/alias + similitud semantica | El match exacto es determinista cuando el termino aparece literal; lo semantico cubre el resto. |
 
-Las reglas de negocio **nunca** pasan por un retriever. Se leen por ID. RAG se reserva para el unico punto donde hay incertidumbre real: el mapeo evidencia → prueba.
+Las reglas de negocio **nunca** pasan por un retriever. Se leen por ID. RAG se reserva para el unico punto donde hay incertidumbre real: el mapeo evidencia → control.
 
 ---
 
@@ -159,9 +159,9 @@ flowchart TB
 
         XLS --> NB1
         GLOS --> NB1
-        NB1 --> MD["Markdown por prueba<br/>controles como secciones"]
+        NB1 --> MD["Markdown por prueba<br/>una subseccion por control"]
         NB1 --> MAN["manifest.json por METOD<br/>IDs, controles, perfil"]
-        NB1 --> EPROF["prueba_profile_embeddings.jsonl<br/>1 vector por prueba"]
+        NB1 --> EPROF["control_profile_embeddings.jsonl<br/>1 vector por control"]
         NB1 --> EGLOS["glossary_embeddings.jsonl"]
     end
 
@@ -183,7 +183,7 @@ flowchart TB
     end
 
     FS -.->|lookup deterministico<br/>+ query embeddings| NB2
-    NB2 -->|1 request por prueba| AZ["Azure OpenAI<br/>Responses API · GPT-5.4<br/>reasoning=high<br/>Structured Outputs"]
+    NB2 -->|1 request por control| AZ["Azure OpenAI<br/>Responses API · GPT-5.4<br/>reasoning=high<br/>Structured Outputs"]
     AZ --> NB2
 ```
 
@@ -218,7 +218,7 @@ Nota de diseno: el chunk de una imagen es un placeholder textual, pero conserva 
 
 ---
 
-### 2.3 El nucleo: retrieval por prueba
+### 2.3 El nucleo: retrieval por control
 
 Este es el diagrama que un AI engineer va a querer ver.
 
@@ -290,7 +290,7 @@ sequenceDiagram
     M-->>P: ObservationPayload (JSON validado por Pydantic)
 
     P->>V: reglas de negocio
-    Note right of V: sin sustento => Critico forzado<br/>criticidad=null si cumple sin hallazgo<br/>elimina control_id ajenos a la prueba<br/>completa controles_evaluados
+    Note right of V: sin sustento => Critico forzado<br/>criticidad=null si cumple sin hallazgo<br/>adjunta prueba y detalle del control desde el manifest
 
     V-->>P: observacion validada
     P->>O: Markdown (unico archivo persistido)
@@ -308,7 +308,7 @@ sequenceDiagram
 | Artefacto | Ubicacion | Contenido | Para quien |
 |---|---|---|---|
 | `<METOD>_run_<ts>.md` | `outputs/` | Version legible | Revisor humano |
-| `result["observations"]` | memoria | Observaciones estructuradas por prueba | Consumo programatico / downstream |
+| `result["observations"]` | memoria | Observaciones estructuradas por control | Consumo programatico / downstream |
 | `result["retrieval_debug"]` | memoria | Por prueba y por chunk: `score`, `retrieval_mode`, `found_by`, `rerank_relevance`, `sent_as_prompt_file`, `sent_as_prompt_image` | **Auditoria y depuracion del retrieval** |
 | `result["usage_summary"]` | memoria | Chunks, embeddings creados vs reutilizados, requests de generacion y de rerank, archivos subidos y omitidos por tamano | Control de costo |
 
@@ -320,4 +320,4 @@ El tercero es el que convierte esto en un sistema de ingenieria y no en una demo
 
 Si solo hay tiempo para un parrafo:
 
-> Generamos observaciones de validacion metodologica sobre evidencia que el usuario sube en cada corrida, con una llamada LLM por prueba. RAG no es opcional aqui por tres razones: el conocimiento no existe hasta el momento de la ejecucion, asi que no hay nada que entrenar; el costo de meter el corpus completo en cada llamada escala como pruebas × corpus, mientras RAG lo acota a top-k por prueba con el corpus embebido una sola vez y cacheado por hash; y cada observacion debe citar el chunk que la sustenta, porque un auditor tiene que poder reconstruir por que el sistema emitio un hallazgo critico. Ademas es RAG **selectivo**: las reglas de negocio — controles, limites, criticidad, excepciones — se leen de forma determinista desde el manifest, porque el sistema ya sabe que prueba esta evaluando y seria un error introducir un retriever probabilistico donde hay certeza. El retrieval es hibrido, denso mas BM25 fusionados por rango reciproco, porque la evidencia esta llena de identificadores exactos que los embeddings densos no capturan bien, con un reranker LLM opcional que descarta en vez de rellenar. Y el retrieval no reemplaza al contexto largo: lo dirige — cuando un chunk se recupera, el archivo completo se adjunta via Files API para que el modelo lo lea entero.
+> Generamos observaciones de validacion metodologica sobre evidencia que el usuario sube en cada corrida, con una llamada LLM por control. RAG no es opcional aqui por tres razones: el conocimiento no existe hasta el momento de la ejecucion, asi que no hay nada que entrenar; el costo de meter el corpus completo en cada llamada escala como pruebas × corpus, mientras RAG lo acota a top-k por control con el corpus embebido una sola vez y cacheado por hash; y cada observacion debe citar el chunk que la sustenta, porque un auditor tiene que poder reconstruir por que el sistema emitio un hallazgo critico. Ademas es RAG **selectivo**: las reglas de negocio — controles, limites, criticidad, excepciones — se leen de forma determinista desde el manifest, porque el sistema ya sabe que control esta evaluando y seria un error introducir un retriever probabilistico donde hay certeza. El retrieval es hibrido, denso mas BM25 fusionados por rango reciproco, porque la evidencia esta llena de identificadores exactos que los embeddings densos no capturan bien, con un reranker LLM opcional que descarta en vez de rellenar. Y el retrieval no reemplaza al contexto largo: lo dirige — cuando un chunk se recupera, el archivo completo se adjunta via Files API para que el modelo lo lea entero.

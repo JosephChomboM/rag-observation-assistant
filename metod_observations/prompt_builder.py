@@ -2,12 +2,12 @@
 
 import json
 
-from .schemas import PruebaSpec, RetrievedChunk
+from .schemas import ControlSpec, PruebaSpec, RetrievedChunk
 
 
 def build_generation_input(
     prueba: PruebaSpec,
-    prueba_markdown: str,
+    control: ControlSpec,
     evidence: list[RetrievedChunk],
     global_context: list[RetrievedChunk],
     glossary_rows: list[dict],
@@ -44,21 +44,24 @@ def build_generation_input(
         }
         for row in glossary_rows
     ]
-    control_ids = [control.control_id for control in prueba.controls]
     attached_files_text = attached_files or []
     attached_images_text = attached_image_files or []
 
     return f"""
-Genera el resultado consolidado de validacion para la siguiente prueba METOD.
+Genera el resultado de validacion para el siguiente control METOD.
 
 METADATA:
 METOD: {prueba.metod_id}
 PRUEBA_ID: {prueba.prueba_id}
 NOMBRE_PRUEBA: {prueba.nombre_prueba}
-CONTROLES_ESPERADOS: {json.dumps(control_ids, ensure_ascii=False)}
+CONTROL_ID: {control.control_id}
 
-ESPECIFICACION DE LA PRUEBA:
-{prueba_markdown}
+ESPECIFICACION DEL CONTROL:
+Detalle: {control.detalle or "No especificado."}
+Prompt: {control.prompt or "No especificado."}
+Limites: {control.limites or "No especificado."}
+Criticidad sugerida: {control.criticidad or "No especificado."}
+Excepciones: {control.excepciones or "Sin excepciones."}
 
 GLOSARIO RELEVANTE:
 {json.dumps(glossary_payload, ensure_ascii=False, indent=2)}

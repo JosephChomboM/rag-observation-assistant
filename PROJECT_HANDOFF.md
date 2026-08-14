@@ -19,7 +19,7 @@ El proyecto genera observaciones metodologicas a partir de:
 
 El primer frontend es un Databricks Notebook. Streamlit queda como una etapa posterior y debe reutilizar el mismo paquete `metod_observations/`.
 
-La salida oficial es una observacion consolidada por **prueba**, no una observacion por control. Cada prueba puede contener varios controles, que el modelo evalua internamente en una unica llamada.
+La salida oficial es una observacion por **control**. La prueba solo agrupa controles para leerlos juntos: cada control recupera su propia evidencia y genera su propia observacion, con una llamada LLM por control.
 
 ## 2. Decisiones funcionales vigentes
 
@@ -42,10 +42,10 @@ Estas decisiones ya fueron discutidas y no deben cambiarse sin una nueva indicac
    - `metod_id`: `BBDD1`
    - `prueba_id`: `BBDD1_P01`
    - `control_id`: `BBDD1_P01_C01`
-8. Se genera un Markdown por prueba, con sus controles como secciones internas.
-9. Se realiza una llamada LLM por prueba, no una llamada por control.
+8. El Markdown de salida agrupa por prueba y abre una subseccion por control.
+9. Se realiza una llamada LLM por control, no una por prueba.
 10. La evidencia se carga por `METOD`; el usuario no crea carpetas por prueba o por control.
-11. El sistema recupera del pool del `METOD` la evidencia semanticamente relevante para cada prueba.
+11. El sistema recupera del pool del `METOD` la evidencia semanticamente relevante para cada control.
 12. El usuario puede cargar contexto compartido en `inputs/_global/`, por ejemplo:
     - un `.sas` que define target, `CODMES` y variables explicativas;
     - un `.txt` con contexto general del modelo.
@@ -56,13 +56,12 @@ Estas decisiones ya fueron discutidas y no deben cambiarse sin una nueva indicac
     - `Moderado`
     - `Baja`
     - `Potencial`
-15. Si no existe sustento suficiente (`sustento_suficiente=false`), la prueba se reporta como hallazgo critico, porque equivale a no haber presentado evidencia para esa prueba:
+15. Si no existe sustento suficiente (`sustento_suficiente=false`), el control se reporta como hallazgo critico, porque equivale a no haber presentado evidencia para ese control:
     - `hay_observacion` se fuerza a `true`;
     - `criticidad` se fuerza a `Critico`;
     - `observacion` explica la falta de sustento;
-    - `informacion_faltante` detalla que evidencia falta;
-    - `controles_que_originan_observacion` cae en todos los controles evaluados si el modelo no precisa cuales.
-16. `hay_observacion=false` con `criticidad=null` queda reservado para el caso legitimo: hay evidencia suficiente y la prueba se cumple.
+    - `informacion_faltante` detalla que evidencia falta.
+16. `hay_observacion=false` con `criticidad=null` queda reservado para el caso legitimo: hay evidencia suficiente y el control se cumple.
 17. Una corrida cubre un solo METOD. Si `inputs/<METOD>/` no tiene archivos soportados, `run_observation_pipeline` corta antes de crear el cliente del modelo. El contenido de `inputs/_global/` no sustituye a la evidencia del METOD.
 
 ## 3. Separacion admin/usuario
@@ -75,11 +74,11 @@ El admin es la unica persona que modifica:
 - los Markdown generados de pruebas;
 - los `manifest.json`;
 - `knowledge/_shared/glossary_data.json`;
-- los embeddings estables de perfiles de prueba;
+- los embeddings estables de perfiles de control;
 - los embeddings estables del glosario;
 - deployments, razonamiento, retrieval, chunking y limites de imagenes en `.env`.
 
-Cada `manifest.json` es el inventario normalizado de un `METOD` generado desde el Excel maestro. Contiene las pruebas, controles, IDs, archivo fuente, Markdown asociado y texto de perfil. El runtime lo usa para saber exactamente que pruebas debe procesar sin volver a leer el Excel administrativo.
+Cada `manifest.json` es el inventario normalizado de un `METOD` generado desde el Excel maestro. Contiene las pruebas, controles, IDs, archivo fuente, Markdown asociado y texto de perfil. El runtime lo usa para saber exactamente que controles debe procesar sin volver a leer el Excel administrativo.
 
 ### Usuario final
 
@@ -113,25 +112,25 @@ No tiene sentido recuperar semanticamente estas reglas porque el sistema ya cono
 
 ### RAG principal
 
-Se usa sobre la evidencia subida por el usuario para encontrar que fragmentos aplican a cada prueba.
+Se usa sobre la evidencia subida por el usuario para encontrar que fragmentos aplican a cada control.
 
 ### RAG de contexto global
 
-Se usa sobre `inputs/_global/` para recuperar configuracion y contexto compartido relevante para cada prueba.
+Se usa sobre `inputs/_global/` para recuperar configuracion y contexto compartido relevante para cada control.
 
 ### RAG auxiliar de glosario
 
 Se recuperan terminos por coincidencia de terminos/aliases y por similitud semantica.
 
-### Perfil de prueba
+### Perfil de control
 
-El admin genera un embedding estable por prueba a partir de su nombre y sus controles. Ese vector se reutiliza como consulta contra:
+El admin genera un embedding estable por control a partir de la prueba que lo contiene y de su Detalle, Prompt, Limites, Criticidad y Excepciones. Ese vector se reutiliza como consulta contra:
 
 - evidencia del `METOD`;
 - contexto global;
 - glosario.
 
-Esto evita volver a generar un embedding de consulta por cada prueba en cada ejecucion de usuario.
+Esto evita volver a generar un embedding de consulta por cada control en cada ejecucion de usuario.
 
 ## 5. Arquitectura vigente
 
@@ -141,15 +140,15 @@ Excel maestro administrado
         v
 01_admin_build_knowledge.py
         |
-        +--> Markdown por prueba
+        +--> Markdown por prueba con subsecciones por control
         +--> manifest.json por METOD
-        +--> embeddings de perfiles por METOD
+        +--> embeddings de perfiles de control por METOD
         +--> embeddings compartidos del glosario
 
 Evidencia del usuario por METOD ----+
 Contexto del usuario en _global ----+--> parseo / chunks / embeddings cacheados
                                      |
-Perfil admin de cada prueba ---------+--> cosine similarity local
+Perfil admin de cada control --------+--> cosine similarity local
                                      |
                                      +--> top evidence
                                      +--> top global context
@@ -160,7 +159,7 @@ Azure OpenAI Responses API
 GPT-5.4 + reasoning high + file_ids/imagenes base64 + Pydantic Structured Outputs
                                      |
                                      v
-JSON + Markdown + retrieval debug por ejecucion
+Markdown por ejecucion (unico archivo persistido)
 ```
 
 No se usa LangChain, una base vectorial externa, Delta ni una jerarquia compleja de clases. El retrieval local lee JSONL y calcula cosine similarity en Python.
@@ -234,10 +233,10 @@ truststore.inject_into_ssl()
 | Variable | Efecto |
 |---|---|
 | `SOFTIA_REASONING_EFFORT` | Mayor razonamiento puede mejorar analisis, pero aumenta latencia y consumo. Actualmente `high`. |
-| `SOFTIA_TOP_K_EVIDENCE` | Cantidad maxima de chunks de evidencia enviados por prueba. Mas alto aumenta contexto y costo, y puede agregar ruido. |
-| `SOFTIA_TOP_K_GLOBAL_CONTEXT` | Cantidad de chunks globales enviados por prueba. |
+| `SOFTIA_TOP_K_EVIDENCE` | Cantidad maxima de chunks de evidencia enviados por control. Mas alto aumenta contexto y costo, y puede agregar ruido. |
+| `SOFTIA_TOP_K_GLOBAL_CONTEXT` | Cantidad de chunks globales enviados por control. |
 | `SOFTIA_TOP_K_GLOSSARY` | Cantidad maxima de terminos recuperados. |
-| `SOFTIA_MAX_PROMPT_FILES` | Cantidad maxima de archivos relevantes adjuntados como `input_file` por prueba. |
+| `SOFTIA_MAX_PROMPT_FILES` | Cantidad maxima de archivos relevantes adjuntados como `input_file` por control. |
 | `SOFTIA_MAX_PROMPT_IMAGES` | Cantidad maxima de imagenes reales adjuntadas por prueba. |
 | `SOFTIA_CHUNK_SIZE` | Tamano de cada chunk en caracteres. |
 | `SOFTIA_CHUNK_OVERLAP` | Solapamiento en caracteres entre chunks consecutivos. |
@@ -254,7 +253,7 @@ truststore.inject_into_ssl()
     _shared/
       glossary_embeddings.jsonl
     BBDD1/
-      prueba_profile_embeddings.jsonl
+      control_profile_embeddings.jsonl
   BBDD1/
     manifest.json
     pruebas/
@@ -417,14 +416,12 @@ El modelo Pydantic `ObservationPayload` exige:
 
 ```json
 {
-  "prueba_id": "BBDD1_P01",
-  "nombre_prueba": "Nombre de la prueba",
+  "control_id": "BBDD1_P01_C01",
+  "sustento_suficiente": true,
   "hay_observacion": true,
   "criticidad": "Moderado",
   "observacion": "...",
   "sustento": "...",
-  "controles_evaluados": ["BBDD1_P01_C01"],
-  "controles_que_originan_observacion": ["BBDD1_P01_C01"],
   "evidencias_usadas": [
     {
       "archivo": "evidencia.sql",
@@ -441,8 +438,7 @@ Pydantic rechaza criticidades fuera del enum. Despues, `validate_observation_pay
 - si `sustento_suficiente=false`, fuerza `hay_observacion=true` y `criticidad=Critico`, y completa el texto de observacion y la informacion faltante;
 - en el resto de casos fuerza la criticidad a `null` cuando no hay observacion;
 - limpia el texto de observacion cuando no hay hallazgo;
-- elimina IDs de controles que no pertenecen a la prueba;
-- completa `controles_evaluados` con todos los controles si el modelo no los entrega.
+- adjunta el `prueba_id`, el `nombre_prueba` y el `detalle` del control desde el manifest, para que el modelo no pueda inventarlos.
 
 ## 13. Modulos productivos
 
@@ -502,7 +498,7 @@ Para cambios nuevos, empezar por `metod_observations/` y los dos notebooks numer
 - parsers de formatos comunes;
 - chunking y cache por hash;
 - retrieval local por cosine similarity;
-- una llamada LLM por prueba;
+- una llamada LLM por control;
 - Azure OpenAI Responses API;
 - GPT-5.4 configurable por `.env`;
 - razonamiento `high`;
@@ -590,7 +586,7 @@ Detalles a vigilar:
 - Mantener configuracion tecnica y modelos bajo control del admin.
 - No reintroducir Claude ni Databricks Model Serving en produccion.
 - No convertir las reglas del Excel en un RAG innecesario.
-- Mantener una llamada LLM por prueba.
+- Mantener una llamada LLM por control.
 - Conservar trazabilidad de controles y evidencias.
 - Enviar imagenes reales al prompt cuando sean recuperadas, respetando el limite.
 - Evitar LangChain, vector DB externa y abstracciones que no aporten al MVP.

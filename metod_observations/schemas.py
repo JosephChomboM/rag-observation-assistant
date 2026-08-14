@@ -16,15 +16,12 @@ class EvidenceReference(BaseModel):
 
 
 class ObservationPayload(BaseModel):
-    prueba_id: str
-    nombre_prueba: str
+    control_id: str
     sustento_suficiente: bool
     hay_observacion: bool
     criticidad: Criticality | None
     observacion: str
     sustento: str
-    controles_evaluados: list[str]
-    controles_que_originan_observacion: list[str]
     evidencias_usadas: list[EvidenceReference]
     informacion_faltante: list[str]
 
@@ -99,14 +96,16 @@ class RetrievedChunk:
 
 @dataclass(frozen=True)
 class ObservationResult:
+    """One observation per control. Pruebas only group controls for reading."""
+
     prueba_id: str
     nombre_prueba: str
+    control_id: str
+    detalle: str
     hay_observacion: bool
     criticidad: str | None
     observacion: str
     sustento: str
-    controles_evaluados: list[str]
-    controles_que_originan_observacion: list[str]
     evidencias_usadas: list[dict[str, Any]]
     informacion_faltante: list[str]
     sustento_suficiente: bool = True

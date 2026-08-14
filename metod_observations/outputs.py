@@ -18,29 +18,30 @@ def utc_run_id(metod_id: str) -> str:
 
 
 def observations_to_markdown(metod_id: str, run_id: str, observations: list[ObservationResult]) -> str:
+    """One section per prueba, one subsection per control inside it."""
     lines = [f"# Observaciones {metod_id}", "", f"Run ID: `{run_id}`", ""]
+    current_prueba = ""
     for observation in observations:
+        if observation.prueba_id != current_prueba:
+            current_prueba = observation.prueba_id
+            lines.extend([f"## {observation.prueba_id} - {observation.nombre_prueba}", ""])
         lines.extend(
             [
-                f"## {observation.prueba_id} - {observation.nombre_prueba}",
+                f"### Control {observation.control_id}",
+                "",
+                observation.detalle or "Sin detalle.",
                 "",
                 f"**Hay observacion:** {'Si' if observation.hay_observacion else 'No'}",
                 "",
                 f"**Criticidad:** {observation.criticidad or 'No aplica'}",
                 "",
-                "### Observacion",
+                "**Observacion**",
                 observation.observacion or "No se genero observacion.",
                 "",
-                "### Sustento",
+                "**Sustento**",
                 observation.sustento or "Sin sustento suficiente.",
                 "",
-                "### Controles evaluados",
-                ", ".join(observation.controles_evaluados) or "No especificado.",
-                "",
-                "### Controles que originan observacion",
-                ", ".join(observation.controles_que_originan_observacion) or "No aplica.",
-                "",
-                "### Informacion faltante",
+                "**Informacion faltante**",
                 "\n".join(f"- {item}" for item in observation.informacion_faltante) or "No reportada.",
                 "",
             ]
@@ -61,8 +62,8 @@ def run_summary_text(result: dict[str, Any]) -> str:
     lines = [
         f"METOD {result.get('metod_id', '')} - corrida {result.get('run_id', '')}",
         "",
-        f"Pruebas evaluadas : {len(observations)}",
-        f"Controles         : {usage.get('controls_processed', 0)}",
+        f"Pruebas           : {usage.get('pruebas_processed', 0)}",
+        f"Controles evaluados: {len(observations)}",
         f"Con observacion   : {len(with_finding)}",
     ]
     for criticidad in CRITICALITY_ORDER:
@@ -74,6 +75,7 @@ def run_summary_text(result: dict[str, Any]) -> str:
     for criticidad in sorted(set(counts) - set(CRITICALITY_ORDER)):
         lines.append(f"    {criticidad:<10}: {counts[criticidad]}")
     lines.append(f"Sin observacion   : {len(observations) - len(with_finding)}")
+    lines.append(f"Pruebas afectadas : {len({item.get('prueba_id') for item in with_finding})}")
 
     evidence_chunks = usage.get("evidence_chunks", 0)
     created = usage.get("evidence_embeddings_created", 0)

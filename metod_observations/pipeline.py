@@ -14,8 +14,7 @@ from .excel_loader import load_pruebas_from_excel
 from .io_utils import ensure_dir, read_json, read_jsonl, write_jsonl
 from .knowledge_builder import (
     build_knowledge_for_all_metods,
-    prueba_markdown_filename,
-    prueba_profile_text,
+    control_profile_text,
 )
 from .observation_generator import generate_observation
 from .outputs import save_run_outputs, utc_run_id
@@ -79,13 +78,6 @@ def load_manifest_pruebas(manifest_path: str) -> list[PruebaSpec]:
             )
         )
     return pruebas
-
-
-def read_prueba_markdown(knowledge_dir: str, prueba: PruebaSpec) -> str:
-    path = Path(knowledge_dir) / "pruebas" / prueba_markdown_filename(prueba)
-    if not path.exists():
-        raise FileNotFoundError(f"Missing prueba markdown: {path}")
-    return path.read_text(encoding="utf-8")
 
 
 def _evidence_rows(chunks) -> list[dict[str, Any]]:
@@ -199,14 +191,17 @@ def build_profile_index(
     embedding_model: str,
     rebuild: bool = False,
 ) -> tuple[list[dict[str, Any]], EmbeddingStats]:
+    """One query embedding per control: each control retrieves its own evidence."""
     rows = [
         {
-            "id": prueba.prueba_id,
+            "id": control.control_id,
             "prueba_id": prueba.prueba_id,
+            "control_id": control.control_id,
             "nombre_prueba": prueba.nombre_prueba,
-            "text": prueba_profile_text(prueba),
+            "text": control_profile_text(prueba, control),
         }
         for prueba in pruebas
+        for control in prueba.controls
     ]
     existing = [] if rebuild else read_jsonl(index_path)
     embedded, stats = embed_rows_with_cache(
@@ -253,7 +248,7 @@ def build_admin_assets(
         ensure_dir(metod_index_dir)
         profile_rows, profile_stats = build_profile_index(
             pruebas,
-            os.path.join(metod_index_dir, "prueba_profile_embeddings.jsonl"),
+            os.path.join(metod_index_dir, "control_profile_embeddings.jsonl"),
             client.embed_text,
             active_config.embedding_deployment,
             rebuild=rebuild_embeddings,
@@ -567,22 +562,23 @@ def run_observation_pipeline(
     )
     profile_rows = _read_admin_index(
         paths["profile_index_path"],
-        f"{clean_metod} prueba profile",
+        f"{clean_metod} control profile",
         active_config.embedding_deployment,
     )
-    profiles_by_prueba = {
-        row.get("prueba_id", row.get("id")): row
+    profiles_by_control = {
+        row.get("control_id", row.get("id")): row
         for row in profile_rows
         if row.get("embedding")
     }
     missing_profiles = [
-        prueba.prueba_id
+        control.control_id
         for prueba in pruebas
-        if prueba.prueba_id not in profiles_by_prueba
+        for control in prueba.controls
+        if control.control_id not in profiles_by_control
     ]
     if missing_profiles:
         raise ValueError(
-            f"Missing admin profile embeddings for {missing_profiles}. "
+            f"Missing admin control profile embeddings for {missing_profiles}. "
             "Rebuild them with 01_admin_build_knowledge.py."
         )
 
@@ -613,7 +609,7 @@ def run_observation_pipeline(
     retrieval_debug_rows = []
     prompt_files_sent = 0
     prompt_files_skipped = 0
-    reranked_pruebas = 0
+    reranked_controls = 0
     uploaded_files: dict[str, tuple[str, str]] = {}
     evidence_bm25 = (
         build_bm25_index(evidence_rows)
@@ -625,149 +621,154 @@ def run_observation_pipeline(
         if active_config.retrieval_mode == "hybrid"
         else None
     )
+    # Un control es la unidad de analisis: recupera su propia evidencia y
+    # produce su propia observacion. La prueba solo agrupa controles.
     for prueba in pruebas:
-        profile_row = profiles_by_prueba[prueba.prueba_id]
-        query_text = profile_row.get("text") or prueba_profile_text(prueba)
-        query_embedding = profile_row["embedding"]
-        first_stage_k = (
-            active_config.top_k_evidence * active_config.candidate_multiplier
-            if active_config.enable_rerank
-            else active_config.top_k_evidence
-        )
-        selected_evidence_rows = _retrieve_context(
-            query_text,
-            query_embedding,
-            evidence_rows,
-            first_stage_k,
-            active_config,
-            evidence_bm25,
-        )
-        if active_config.enable_rerank:
-            selected_evidence_rows, reranked = rerank_rows(
+        for control in prueba.controls:
+            profile_row = profiles_by_control[control.control_id]
+            query_text = profile_row.get("text") or control_profile_text(prueba, control)
+            query_embedding = profile_row["embedding"]
+            first_stage_k = (
+                active_config.top_k_evidence * active_config.candidate_multiplier
+                if active_config.enable_rerank
+                else active_config.top_k_evidence
+            )
+            selected_evidence_rows = _retrieve_context(
                 query_text,
-                selected_evidence_rows,
-                active_config.top_k_evidence,
-                client.parse_response,
-                min_relevance=active_config.rerank_min_relevance,
+                query_embedding,
+                evidence_rows,
+                first_stage_k,
+                active_config,
+                evidence_bm25,
             )
-            reranked_pruebas += int(reranked)
-        retrieved_evidence = compact_retrieved_evidence(selected_evidence_rows)
-        selected_global_context_rows = _retrieve_context(
-            query_text,
-            query_embedding,
-            global_context_rows,
-            active_config.top_k_global_context,
-            active_config,
-            global_bm25,
-        )
-        retrieved_global_context = compact_retrieved_evidence(selected_global_context_rows)
-        selected_glossary_rows = _select_glossary_rows(
-            query_text,
-            query_embedding,
-            glossary_rows,
-            active_config.top_k_glossary,
-        )
-        file_inputs, attached_files, attached_file_paths, skipped_files = (
-            _prompt_file_attachments(
-                selected_evidence_rows,
-                selected_global_context_rows,
-                client,
-                uploaded_files,
-                active_config.max_prompt_files,
+            if active_config.enable_rerank:
+                selected_evidence_rows, reranked = rerank_rows(
+                    query_text,
+                    selected_evidence_rows,
+                    active_config.top_k_evidence,
+                    client.parse_response,
+                    min_relevance=active_config.rerank_min_relevance,
+                )
+                reranked_controls += int(reranked)
+            retrieved_evidence = compact_retrieved_evidence(selected_evidence_rows)
+            selected_global_context_rows = _retrieve_context(
+                query_text,
+                query_embedding,
+                global_context_rows,
+                active_config.top_k_global_context,
+                active_config,
+                global_bm25,
             )
-        )
-        prompt_files_sent += len(file_inputs)
-        prompt_files_skipped += len(skipped_files)
-        image_data_urls, attached_image_files = _prompt_image_attachments(
-            selected_evidence_rows,
-            active_config.max_prompt_images,
-        )
-        prueba_markdown = read_prueba_markdown(paths["knowledge_dir"], prueba)
-        input_text = build_generation_input(
-            prueba,
-            prueba_markdown,
-            retrieved_evidence,
-            retrieved_global_context,
-            selected_glossary_rows,
-            attached_files=attached_files,
-            attached_image_files=attached_image_files,
-        )
-        observations.append(
-            generate_observation(
-                input_text,
+            retrieved_global_context = compact_retrieved_evidence(selected_global_context_rows)
+            selected_glossary_rows = _select_glossary_rows(
+                query_text,
+                query_embedding,
+                glossary_rows,
+                active_config.top_k_glossary,
+            )
+            file_inputs, attached_files, attached_file_paths, skipped_files = (
+                _prompt_file_attachments(
+                    selected_evidence_rows,
+                    selected_global_context_rows,
+                    client,
+                    uploaded_files,
+                    active_config.max_prompt_files,
+                )
+            )
+            prompt_files_sent += len(file_inputs)
+            prompt_files_skipped += len(skipped_files)
+            image_data_urls, attached_image_files = _prompt_image_attachments(
+                selected_evidence_rows,
+                active_config.max_prompt_images,
+            )
+            input_text = build_generation_input(
                 prueba,
-                client.parse_response,
-                file_inputs=file_inputs,
-                image_data_urls=image_data_urls,
+                control,
+                retrieved_evidence,
+                retrieved_global_context,
+                selected_glossary_rows,
+                attached_files=attached_files,
+                attached_image_files=attached_image_files,
             )
-        )
+            observations.append(
+                generate_observation(
+                    input_text,
+                    prueba,
+                    control,
+                    client.parse_response,
+                    file_inputs=file_inputs,
+                    image_data_urls=image_data_urls,
+                )
+            )
 
-        for row in selected_evidence_rows:
-            retrieval_debug_rows.append(
-                {
-                    "metod_id": clean_metod,
-                    "prueba_id": prueba.prueba_id,
-                    "source_type": "evidence",
-                    "score": row.get("score"),
-                    "retrieval_mode": active_config.retrieval_mode,
-                    "found_by": row.get("found_by"),
-                    "rerank_relevance": row.get("rerank_relevance"),
-                    "chunk_id": row.get("id"),
-                    "source_file": row.get("source_file"),
-                    "sent_as_prompt_file": row.get("chunk", {})
-                    .get("metadata", {})
-                    .get("source_path")
-                    in attached_file_paths,
-                    "sent_as_prompt_image": row.get("source_file") in attached_image_files,
-                }
-            )
-        for row in selected_glossary_rows:
-            retrieval_debug_rows.append(
-                {
-                    "metod_id": clean_metod,
-                    "prueba_id": prueba.prueba_id,
-                    "source_type": "glossary",
-                    "score": row.get("score"),
-                    "term": row.get("term"),
-                }
-            )
-        for row in selected_global_context_rows:
-            retrieval_debug_rows.append(
-                {
-                    "metod_id": clean_metod,
-                    "prueba_id": prueba.prueba_id,
-                    "source_type": "global_context",
-                    "score": row.get("score"),
-                    "chunk_id": row.get("id"),
-                    "source_file": row.get("source_file"),
-                    "source_scope": "global",
-                    "sent_as_prompt_file": row.get("chunk", {})
-                    .get("metadata", {})
-                    .get("source_path")
-                    in attached_file_paths,
-                }
-            )
+            debug_keys = {
+                "metod_id": clean_metod,
+                "prueba_id": prueba.prueba_id,
+                "control_id": control.control_id,
+            }
+            for row in selected_evidence_rows:
+                retrieval_debug_rows.append(
+                    {
+                        **debug_keys,
+                        "source_type": "evidence",
+                        "score": row.get("score"),
+                        "retrieval_mode": active_config.retrieval_mode,
+                        "found_by": row.get("found_by"),
+                        "rerank_relevance": row.get("rerank_relevance"),
+                        "chunk_id": row.get("id"),
+                        "source_file": row.get("source_file"),
+                        "sent_as_prompt_file": row.get("chunk", {})
+                        .get("metadata", {})
+                        .get("source_path")
+                        in attached_file_paths,
+                        "sent_as_prompt_image": row.get("source_file") in attached_image_files,
+                    }
+                )
+            for row in selected_glossary_rows:
+                retrieval_debug_rows.append(
+                    {
+                        **debug_keys,
+                        "source_type": "glossary",
+                        "score": row.get("score"),
+                        "term": row.get("term"),
+                    }
+                )
+            for row in selected_global_context_rows:
+                retrieval_debug_rows.append(
+                    {
+                        **debug_keys,
+                        "source_type": "global_context",
+                        "score": row.get("score"),
+                        "chunk_id": row.get("id"),
+                        "source_file": row.get("source_file"),
+                        "source_scope": "global",
+                        "sent_as_prompt_file": row.get("chunk", {})
+                        .get("metadata", {})
+                        .get("source_path")
+                        in attached_file_paths,
+                    }
+                )
 
     run_id = utc_run_id(clean_metod)
     usage_summary = {
         **evidence_summary,
         **global_context_summary,
         "pruebas_processed": len(pruebas),
-        "controls_processed": sum(len(prueba.controls) for prueba in pruebas),
-        "llm_generation_requests": len(pruebas),
+        "controls_processed": len(observations),
+        "llm_generation_requests": len(observations),
         "retrieval_mode": active_config.retrieval_mode,
         "rerank_enabled": active_config.enable_rerank,
-        "pruebas_reranked": reranked_pruebas,
-        "llm_rerank_requests": reranked_pruebas,
-        "top_k_global_context_per_prueba": active_config.top_k_global_context,
-        "max_prompt_files_per_prueba": active_config.max_prompt_files,
+        "controls_reranked": reranked_controls,
+        "llm_rerank_requests": reranked_controls,
+        "top_k_global_context_per_control": active_config.top_k_global_context,
+        "max_prompt_files_per_control": active_config.max_prompt_files,
         "files_uploaded": len(uploaded_files),
         "prompt_files_sent": prompt_files_sent,
         "prompt_files_skipped_by_size": prompt_files_skipped,
-        "max_prompt_images_per_prueba": active_config.max_prompt_images,
+        "max_prompt_images_per_control": active_config.max_prompt_images,
         "glossary_embeddings_loaded": len(glossary_rows),
         "profile_embeddings_loaded": len(profile_rows),
-        "admin_query_embeddings_reused": len(pruebas),
+        "admin_query_embeddings_reused": len(observations),
     }
     output_paths = save_run_outputs(
         active_config.outputs_base_dir,

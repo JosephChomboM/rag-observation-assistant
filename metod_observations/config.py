@@ -98,7 +98,7 @@ def metod_paths(config: AppConfig, metod_id: str) -> dict[str, str]:
             config.knowledge_base_dir,
             "_indexes",
             clean_metod,
-            "prueba_profile_embeddings.jsonl",
+            "control_profile_embeddings.jsonl",
         ),
         "global_context_index_path": os.path.join(
             config.indexes_base_dir,

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .excel_loader import slugify
 from .io_utils import ensure_dir, write_json
-from .schemas import PruebaSpec
+from .schemas import ControlSpec, PruebaSpec
 
 
 def prueba_markdown_filename(prueba: PruebaSpec) -> str:
@@ -47,6 +47,22 @@ def prueba_to_markdown(prueba: PruebaSpec) -> str:
             ]
         )
     return "\n".join(lines).strip() + "\n"
+
+
+def control_profile_text(prueba: PruebaSpec, control: ControlSpec) -> str:
+    """Query text of a single control: what its evidence retrieval searches for."""
+    return "\n".join(
+        [
+            f"METOD: {prueba.metod_id}",
+            f"Prueba: {prueba.nombre_prueba}",
+            f"Control: {control.control_id}",
+            f"Detalle: {control.detalle}",
+            f"Prompt: {control.prompt}",
+            f"Limites: {control.limites}",
+            f"Criticidad: {control.criticidad}",
+            f"Excepciones: {control.excepciones}",
+        ]
+    )
 
 
 def prueba_profile_text(prueba: PruebaSpec) -> str:
