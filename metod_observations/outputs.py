@@ -9,7 +9,9 @@ from typing import Any
 from .io_utils import ensure_dir
 from .schemas import ObservationResult
 
-CRITICALITY_ORDER = ["Critico", "Relevante", "Moderado", "Baja", "Potencial"]
+CRITICALITY_ORDER = [
+    "Critico", "Relevante", "Moderado", "Baja", "Potencial", "No concluyente"
+]
 
 
 def utc_run_id(metod_id: str) -> str:
@@ -54,10 +56,18 @@ def run_summary_text(result: dict[str, Any]) -> str:
     observations = result.get("observations", [])
     usage = result.get("usage_summary", {})
     with_finding = [item for item in observations if item.get("hay_observacion")]
+    # "No concluyente" no es hallazgo (hay_observacion=false) ni control limpio:
+    # es un pendiente de sustento, se cuenta y reporta como categoria aparte.
+    no_concluyente = [
+        item for item in observations if item.get("criticidad") == "No concluyente"
+    ]
     counts = Counter(item.get("criticidad") or "Sin criticidad" for item in with_finding)
+    if no_concluyente:
+        counts["No concluyente"] = len(no_concluyente)
     sin_sustento = sum(
         1 for item in with_finding if not item.get("sustento_suficiente", True)
     )
+    sin_observacion = len(observations) - len(with_finding) - len(no_concluyente)
 
     lines = [
         f"METOD {result.get('metod_id', '')} - corrida {result.get('run_id', '')}",
@@ -71,10 +81,13 @@ def run_summary_text(result: dict[str, Any]) -> str:
             detalle = ""
             if criticidad == "Critico" and sin_sustento:
                 detalle = f"  ({sin_sustento} por falta de evidencia)"
-            lines.append(f"    {criticidad:<10}: {counts[criticidad]}{detalle}")
+            elif criticidad == "No concluyente":
+                detalle = "  (pendiente: falta subir insumos)"
+            lines.append(f"    {criticidad:<13}: {counts[criticidad]}{detalle}")
     for criticidad in sorted(set(counts) - set(CRITICALITY_ORDER)):
-        lines.append(f"    {criticidad:<10}: {counts[criticidad]}")
-    lines.append(f"Sin observacion   : {len(observations) - len(with_finding)}")
+        lines.append(f"    {criticidad:<13}: {counts[criticidad]}")
+    lines.append(f"No concluyentes   : {len(no_concluyente)}")
+    lines.append(f"Sin observacion   : {sin_observacion}")
     lines.append(f"Pruebas afectadas : {len({item.get('prueba_id') for item in with_finding})}")
 
     evidence_chunks = usage.get("evidence_chunks", 0)

@@ -6,7 +6,9 @@ from typing import Any, Literal
 from pydantic import BaseModel
 
 
-Criticality = Literal["Critico", "Relevante", "Moderado", "Baja", "Potencial"]
+Criticality = Literal[
+    "Critico", "Relevante", "Moderado", "Baja", "Potencial", "No concluyente"
+]
 
 
 class EvidenceReference(BaseModel):
@@ -18,6 +20,7 @@ class EvidenceReference(BaseModel):
 class ObservationPayload(BaseModel):
     control_id: str
     sustento_suficiente: bool
+    insumo_parcial: bool
     hay_observacion: bool
     criticidad: Criticality | None
     observacion: str
@@ -109,6 +112,7 @@ class ObservationResult:
     evidencias_usadas: list[dict[str, Any]]
     informacion_faltante: list[str]
     sustento_suficiente: bool = True
+    insumo_parcial: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

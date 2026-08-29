@@ -20,15 +20,23 @@ Eres un validador metodologico.
 - Usa el contexto global para interpretar variables y parametros; no lo trates como evidencia de cumplimiento o incumplimiento.
 - No incluyas archivos de contexto global en evidencias_usadas.
 - Usa solamente el control_id y los IDs de evidencia proporcionados en la solicitud.
-- sustento_suficiente indica si la evidencia recuperada alcanza para evaluar este control.
-- Si no alcanza, devuelve sustento_suficiente=false y detalla en informacion_faltante que evidencia falta. El control se reporta como Critico automaticamente: no inventes un hallazgo para justificarlo.
-- Si alcanza y el control se cumple, devuelve sustento_suficiente=true, hay_observacion=false, criticidad=null y observacion="".
+- sustento_suficiente indica si la evidencia recuperada alcanza para evaluar este control y concluir su criticidad.
+- insumo_parcial indica si se presento algun insumo relevante para este control (por ejemplo una captura, un grafico o un archivo relacionado) aunque no alcance para concluir.
+- Cuando la evidencia no alcance, decide entre estos dos casos:
+  1. Hay insumo parcial relevante pero insuficiente para derivar el resultado (por ejemplo llega una captura de un grafico pero faltan los datos para calcular las bandas): devuelve sustento_suficiente=false, insumo_parcial=true, hay_observacion=false, criticidad="No concluyente" y observacion="". No concluyas la criticidad ni inventes un hallazgo; detalla en informacion_faltante exactamente que se necesita subir para poder concluir.
+  2. No se presento ningun insumo relevante para el control: devuelve sustento_suficiente=false, insumo_parcial=false. El control se reporta como Critico automaticamente por falta de sustento; no inventes un hallazgo para justificarlo, solo detalla en informacion_faltante que evidencia falta.
+- Si la evidencia alcanza y el control se cumple, devuelve sustento_suficiente=true, insumo_parcial=true, hay_observacion=false, criticidad=null y observacion="".
 - Cumple estrictamente el esquema de salida solicitado.
 """.strip()
 
 SIN_SUSTENTO_OBSERVACION = (
     "No se presento evidencia suficiente para evaluar este control. "
     "Se reporta como Critico por falta de sustento."
+)
+
+NO_CONCLUYENTE_OBSERVACION = (
+    "No se puede concluir la observacion ni la criticidad con el insumo presentado. "
+    "Revisa 'informacion faltante' para saber que se debe subir."
 )
 
 
@@ -38,7 +46,24 @@ def validate_observation_payload(
     control: ControlSpec,
 ) -> ObservationResult:
     if not parsed.sustento_suficiente:
-        # Sin evidencia que lo sustente, el control se trata como si no se
+        if parsed.insumo_parcial:
+            # Hubo insumo relevante pero no alcanza para concluir. No se fuerza
+            # criticidad: queda "No concluyente" y se pide lo que falta subir.
+            return ObservationResult(
+                prueba_id=prueba.prueba_id,
+                nombre_prueba=prueba.nombre_prueba,
+                control_id=control.control_id,
+                detalle=control.detalle,
+                hay_observacion=False,
+                criticidad="No concluyente",
+                observacion=parsed.observacion or NO_CONCLUYENTE_OBSERVACION,
+                sustento=parsed.sustento,
+                evidencias_usadas=[item.model_dump() for item in parsed.evidencias_usadas],
+                informacion_faltante=parsed.informacion_faltante or [NO_CONCLUYENTE_OBSERVACION],
+                sustento_suficiente=False,
+                insumo_parcial=True,
+            )
+        # Sin ningun insumo que lo sustente, el control se trata como si no se
         # hubieran presentado inputs: observacion Critica, no un "sin hallazgo".
         return ObservationResult(
             prueba_id=prueba.prueba_id,
@@ -52,6 +77,7 @@ def validate_observation_payload(
             evidencias_usadas=[item.model_dump() for item in parsed.evidencias_usadas],
             informacion_faltante=parsed.informacion_faltante or [SIN_SUSTENTO_OBSERVACION],
             sustento_suficiente=False,
+            insumo_parcial=False,
         )
 
     return ObservationResult(
@@ -65,6 +91,7 @@ def validate_observation_payload(
         sustento=parsed.sustento,
         evidencias_usadas=[item.model_dump() for item in parsed.evidencias_usadas],
         informacion_faltante=parsed.informacion_faltante,
+        insumo_parcial=parsed.insumo_parcial,
     )
 
 
