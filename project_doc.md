@@ -130,8 +130,8 @@ Runtime evidence should live in Databricks Workspace Files under the user worksp
 Default MVP path:
 
 ```text
-/Workspace/Users/josephchombo@company.com/softia_mvp/inputs/METOD1/
-/Workspace/Users/josephchombo@company.com/softia_mvp/inputs/METOD2/
+/Workspace/Users/your.name@example.com/rag_observations/inputs/METOD1/
+/Workspace/Users/your.name@example.com/rag_observations/inputs/METOD2/
 ...
 ```
 
@@ -150,7 +150,7 @@ Inputs, indexes, and outputs must be stored in Databricks Workspace Files under 
 Base workspace path:
 
 ```text
-/Workspace/Users/josephchombo@company.com/softia_mvp/
+/Workspace/Users/your.name@example.com/rag_observations/
 ```
 
 Use this path with normal Python file operations:
@@ -170,7 +170,7 @@ PIL
 Runtime folders:
 
 ```text
-/Workspace/Users/josephchombo@company.com/softia_mvp/
+/Workspace/Users/your.name@example.com/rag_observations/
 │
 ├── inputs/
 │   ├── METOD1/
@@ -198,19 +198,19 @@ Runtime folders:
 The notebook should read evidence files from:
 
 ```text
-/Workspace/Users/josephchombo@company.com/softia_mvp/inputs/METODX/
+/Workspace/Users/your.name@example.com/rag_observations/inputs/METODX/
 ```
 
 The notebook should save indexes to:
 
 ```text
-/Workspace/Users/josephchombo@company.com/softia_mvp/indexes/METODX/
+/Workspace/Users/your.name@example.com/rag_observations/indexes/METODX/
 ```
 
 The notebook should save outputs to:
 
 ```text
-/Workspace/Users/josephchombo@company.com/softia_mvp/outputs/generated_observations/
+/Workspace/Users/your.name@example.com/rag_observations/outputs/generated_observations/
 ```
 
 ## 4.2 FileStore or Blob Storage for Stable METOD Knowledge
@@ -254,7 +254,7 @@ KNOWLEDGE_BASE_DIR = "/dbfs/FileStore/gestor_obs/knowledge"
 If Blob Storage or ADLS is available later, the path should be easy to replace:
 
 ```python
-KNOWLEDGE_BASE_DIR = "/mnt/softia-knowledge/knowledge"
+KNOWLEDGE_BASE_DIR = "/mnt/rag-knowledge/knowledge"
 ```
 
 or another approved workplace storage path.
@@ -297,7 +297,7 @@ The notebook must distinguish between three path types.
 Use:
 
 ```text
-/Workspace/Users/josephchombo@company.com/softia_mvp/...
+/Workspace/Users/your.name@example.com/rag_observations/...
 ```
 
 Use these with:
@@ -319,7 +319,7 @@ PIL
 Use:
 
 ```text
-file:/Workspace/Users/josephchombo@company.com/softia_mvp/...
+file:/Workspace/Users/your.name@example.com/rag_observations/...
 ```
 
 Use these only if a Databricks or Spark API requires a URI.
@@ -347,7 +347,7 @@ The MVP should use this folder structure.
 ## 6.1 Workspace Files: Inputs, Indexes, Outputs
 
 ```text
-/Workspace/Users/josephchombo@company.com/softia_mvp/
+/Workspace/Users/your.name@example.com/rag_observations/
 │
 ├── inputs/
 │   ├── METOD1/
@@ -462,11 +462,11 @@ Use this storage configuration.
 # STORAGE CONFIGURATION
 # ============================================================
 
-USER_EMAIL = "josephchombo@company.com"
+USER_EMAIL = "your.name@example.com"
 
 # Runtime artifacts live in Workspace Files.
 # Use this with normal Python file operations.
-WORKSPACE_BASE_DIR = f"/Workspace/Users/{USER_EMAIL}/softia_mvp"
+WORKSPACE_BASE_DIR = f"/Workspace/Users/{USER_EMAIL}/rag_observations"
 
 # Use this only if a Databricks API requires file:/ paths.
 WORKSPACE_BASE_URI = f"file:{WORKSPACE_BASE_DIR}"
@@ -476,7 +476,7 @@ WORKSPACE_BASE_URI = f"file:{WORKSPACE_BASE_DIR}"
 KNOWLEDGE_BASE_DIR = "/dbfs/FileStore/gestor_obs/knowledge"
 
 # If Blob/ADLS is mounted later, replace with something like:
-# KNOWLEDGE_BASE_DIR = "/mnt/softia-knowledge/knowledge"
+# KNOWLEDGE_BASE_DIR = "/mnt/rag-knowledge/knowledge"
 
 INPUTS_BASE_DIR = f"{WORKSPACE_BASE_DIR}/inputs"
 INDEXES_BASE_DIR = f"{WORKSPACE_BASE_DIR}/indexes"
@@ -691,7 +691,7 @@ Since Delta tables are not allowed, store embeddings in JSON files.
 For each METOD, save:
 
 ```text
-/Workspace/Users/josephchombo@company.com/softia_mvp/indexes/METOD1/chunks_with_embeddings.json
+/Workspace/Users/your.name@example.com/rag_observations/indexes/METOD1/chunks_with_embeddings.json
 ```
 
 The file should contain a list of chunk dictionaries.
@@ -1015,7 +1015,7 @@ The notebook should save the observation as JSON and Markdown.
 Path:
 
 ```text
-/Workspace/Users/josephchombo@company.com/softia_mvp/outputs/generated_observations/METODX_observation_YYYYMMDD_HHMMSS.json
+/Workspace/Users/your.name@example.com/rag_observations/outputs/generated_observations/METODX_observation_YYYYMMDD_HHMMSS.json
 ```
 
 ## Markdown Output
@@ -1023,7 +1023,7 @@ Path:
 Path:
 
 ```text
-/Workspace/Users/josephchombo@company.com/softia_mvp/outputs/generated_observations/METODX_observation_YYYYMMDD_HHMMSS.md
+/Workspace/Users/your.name@example.com/rag_observations/outputs/generated_observations/METODX_observation_YYYYMMDD_HHMMSS.md
 ```
 
 The Markdown file should contain:
@@ -1195,9 +1195,9 @@ At the end of the notebook, the user should see a structured generated observati
 Also save:
 
 ```text
-/Workspace/Users/josephchombo@company.com/softia_mvp/outputs/generated_observations/METOD1_observation_YYYYMMDD_HHMMSS.json
+/Workspace/Users/your.name@example.com/rag_observations/outputs/generated_observations/METOD1_observation_YYYYMMDD_HHMMSS.json
 
-/Workspace/Users/josephchombo@company.com/softia_mvp/outputs/generated_observations/METOD1_observation_YYYYMMDD_HHMMSS.md
+/Workspace/Users/your.name@example.com/rag_observations/outputs/generated_observations/METOD1_observation_YYYYMMDD_HHMMSS.md
 ```
 
 ---

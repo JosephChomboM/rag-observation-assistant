@@ -44,10 +44,10 @@ def resolve_chat_deployment() -> str:
 def load_config(env_path: str = ".env") -> AppConfig:
     configure_runtime(env_path)
     knowledge_base = os.getenv(
-        "SOFTIA_KNOWLEDGE_BASE_DIR",
+        "RAG_KNOWLEDGE_BASE_DIR",
         "/dbfs/FileStore/gestor_obs/knowledge",
     ).strip()
-    reasoning_effort = os.getenv("SOFTIA_REASONING_EFFORT", "high").strip().lower()
+    reasoning_effort = os.getenv("RAG_REASONING_EFFORT", "high").strip().lower()
 
     return AppConfig(
         knowledge_base_dir=knowledge_base,
@@ -57,17 +57,17 @@ def load_config(env_path: str = ".env") -> AppConfig:
         embedding_deployment=resolve_embedding_deployment(),
         chat_deployment=resolve_chat_deployment(),
         reasoning_effort=reasoning_effort,
-        top_k_evidence=int(os.getenv("SOFTIA_TOP_K_EVIDENCE", "8")),
-        top_k_global_context=int(os.getenv("SOFTIA_TOP_K_GLOBAL_CONTEXT", "4")),
-        top_k_glossary=int(os.getenv("SOFTIA_TOP_K_GLOSSARY", "5")),
-        max_prompt_files=int(os.getenv("SOFTIA_MAX_PROMPT_FILES", "4")),
-        max_prompt_images=int(os.getenv("SOFTIA_MAX_PROMPT_IMAGES", "2")),
-        chunk_size=int(os.getenv("SOFTIA_CHUNK_SIZE", "1800")),
-        chunk_overlap=int(os.getenv("SOFTIA_CHUNK_OVERLAP", "200")),
-        retrieval_mode=os.getenv("SOFTIA_RETRIEVAL_MODE", "hybrid").strip().lower(),
-        candidate_multiplier=int(os.getenv("SOFTIA_CANDIDATE_MULTIPLIER", "3")),
-        enable_rerank=os.getenv("SOFTIA_ENABLE_RERANK", "false").strip().lower() == "true",
-        rerank_min_relevance=int(os.getenv("SOFTIA_RERANK_MIN_RELEVANCE", "1")),
+        top_k_evidence=int(os.getenv("RAG_TOP_K_EVIDENCE", "8")),
+        top_k_global_context=int(os.getenv("RAG_TOP_K_GLOBAL_CONTEXT", "4")),
+        top_k_glossary=int(os.getenv("RAG_TOP_K_GLOSSARY", "5")),
+        max_prompt_files=int(os.getenv("RAG_MAX_PROMPT_FILES", "4")),
+        max_prompt_images=int(os.getenv("RAG_MAX_PROMPT_IMAGES", "2")),
+        chunk_size=int(os.getenv("RAG_CHUNK_SIZE", "1800")),
+        chunk_overlap=int(os.getenv("RAG_CHUNK_OVERLAP", "200")),
+        retrieval_mode=os.getenv("RAG_RETRIEVAL_MODE", "hybrid").strip().lower(),
+        candidate_multiplier=int(os.getenv("RAG_CANDIDATE_MULTIPLIER", "3")),
+        enable_rerank=os.getenv("RAG_ENABLE_RERANK", "false").strip().lower() == "true",
+        rerank_min_relevance=int(os.getenv("RAG_RERANK_MIN_RELEVANCE", "1")),
     )
 
 

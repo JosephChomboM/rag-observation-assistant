@@ -42,7 +42,7 @@ El diseno hace **una llamada LLM por control** (decision del usuario: cada contr
 | Meter todo el corpus en cada llamada | `P × T` |
 | RAG (top-k por control) | `P × k×chunk_size` + `T` embebido **una sola vez** |
 
-Con `SOFTIA_CHUNK_SIZE=1800` y `SOFTIA_TOP_K_EVIDENCE=8`, el contexto recuperado por control queda acotado a ~14K caracteres **independientemente de si el usuario subio 5 archivos o 500**. El corpus completo se embebe una vez, se cachea por hash (`embed_rows_with_cache`) y se reutiliza mientras el archivo no cambie.
+Con `RAG_CHUNK_SIZE=1800` y `RAG_TOP_K_EVIDENCE=8`, el contexto recuperado por control queda acotado a ~14K caracteres **independientemente de si el usuario subio 5 archivos o 500**. El corpus completo se embebe una vez, se cachea por hash (`embed_rows_with_cache`) y se reutiliza mientras el archivo no cambie.
 
 El punto clave: **el costo de RAG es sublineal respecto al tamano del corpus; el de stuffing es lineal y ademas multiplicado por P.** Con `reasoning={"effort": "high"}`, cada token de entrada compite ademas con el presupuesto de razonamiento dentro de `max_output_tokens=25000`.
 
@@ -96,7 +96,7 @@ Tres respuestas, en orden de fuerza:
 
 1. Contexto largo no resuelve el costo `P × T` ni el limite de 50 MB por request. El problema economico persiste intacto.
 2. Contexto largo no produce atribucion. Sigue sin haber `chunk_id` que citar ni forma de auditar.
-3. **El sistema ya usa contexto largo — RAG es lo que decide cuando usarlo.** Cuando un chunk es recuperado, el archivo *completo* se adjunta via Files API como `input_file` (hasta `SOFTIA_MAX_PROMPT_FILES`), y los PDFs con `detail="high"`. Es decir: el retrieval actua como **router** que selecciona que documentos merecen contexto largo, y el modelo los lee enteros. No es RAG *en lugar de* contexto largo; es RAG *dirigiendo* contexto largo. Esa combinacion es estrictamente superior a cualquiera de las dos por separado.
+3. **El sistema ya usa contexto largo — RAG es lo que decide cuando usarlo.** Cuando un chunk es recuperado, el archivo *completo* se adjunta via Files API como `input_file` (hasta `RAG_MAX_PROMPT_FILES`), y los PDFs con `detail="high"`. Es decir: el retrieval actua como **router** que selecciona que documentos merecen contexto largo, y el modelo los lee enteros. No es RAG *en lugar de* contexto largo; es RAG *dirigiendo* contexto largo. Esa combinacion es estrictamente superior a cualquiera de las dos por separado.
 
 **"Por que no una base vectorial (Pinecone, Chroma, Databricks Vector Search)?"**
 
@@ -125,7 +125,7 @@ Si la defensa se detiene en "usamos RAG", un revisor competente atacara la calid
 - **Fusion RRF** (`k=60`): cosine y BM25 viven en escalas incomparables. Cualquier suma ponderada de sus scores exige calibracion por corpus, que se desajusta cuando cambia la evidencia. La posicion en el ranking es libre de escala, y eso hace la fusion estable **sin hiperparametros que tunear**.
 - Cada canal propone `candidate_multiplier × top_k` candidatos, para que la fusion pueda promover un chunk que solo un canal encontro.
 
-**Reranking listwise opcional** (`reranking.py`, `SOFTIA_ENABLE_RERANK`):
+**Reranking listwise opcional** (`reranking.py`, `RAG_ENABLE_RERANK`):
 
 La primera etapa optimiza *recall* sobre una ventana amplia de candidatos; el reranker cambia una llamada barata por *precision*, puntuando 0–3 cada fragmento y descartando lo que no llegue al umbral. Degrada con elegancia: **cualquier fallo vuelve al ranking fusionado en vez de romper la corrida** — el rerank es una mejora, no una dependencia.
 

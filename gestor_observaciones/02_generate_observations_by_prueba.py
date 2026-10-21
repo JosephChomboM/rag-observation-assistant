@@ -12,7 +12,7 @@ The pipeline reads:
 - shared backend code from <BACKEND_PROJECT_DIR>/metod_observations/
 - METOD evidence from <user_base_dir>/inputs/<METOD>/
 - shared user context from <user_base_dir>/inputs/_global/
-- admin knowledge and stable embeddings from SOFTIA_KNOWLEDGE_BASE_DIR
+- admin knowledge and stable embeddings from RAG_KNOWLEDGE_BASE_DIR
 
 And writes:
 - the observation markdown to <user_base_dir>/outputs/
