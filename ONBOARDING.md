@@ -371,7 +371,7 @@ Sin POO pesada: `dataclass` para contratos de datos, una sola clase ligera (`Mod
 | [`outputs.py`](metod_observations/outputs.py) | Escritura de Markdown y armado del `result`. |
 
 > [!NOTE]
-> **No confundir con el núcleo.** Material histórico/experimental: `chunking_experiment/`, `base64toimage/`, `knowledge/METOD5/*`, `project_doc.md` (spec viejo) y notebooks exploratorios. El runtime real es `metod_observations/` + los notebooks 01 y 02.
+> **No confundir con el núcleo.** Material histórico/experimental: `chunking_experiment/`, `knowledge/METOD5/*`, `project_doc.md` (spec viejo) y notebooks exploratorios. El runtime real es `metod_observations/` + los notebooks 01 y 02.
 
 ---
 
@@ -394,27 +394,27 @@ AZURE_OPENAI_ENDPOINT=https://<recurso>.openai.azure.com/
 AZURE_OPENAI_CHAT_DEPLOYMENT=OAIXXX05        # → GPT-5.4
 AZURE_OPENAI_EMBEDDING_DEPLOYMENT=OAIXXX04   # → text-embedding-3-small
 
-SOFTIA_KNOWLEDGE_BASE_DIR=/dbfs/FileStore/gestor_obs/knowledge
+RAG_KNOWLEDGE_BASE_DIR=/dbfs/FileStore/gestor_obs/knowledge
 
-SOFTIA_REASONING_EFFORT=high
-SOFTIA_TOP_K_EVIDENCE=8
-SOFTIA_TOP_K_GLOBAL_CONTEXT=4
-SOFTIA_TOP_K_GLOSSARY=5
-SOFTIA_MAX_PROMPT_FILES=4
-SOFTIA_MAX_PROMPT_IMAGES=2
-SOFTIA_CHUNK_SIZE=1800
-SOFTIA_CHUNK_OVERLAP=200
+RAG_REASONING_EFFORT=high
+RAG_TOP_K_EVIDENCE=8
+RAG_TOP_K_GLOBAL_CONTEXT=4
+RAG_TOP_K_GLOSSARY=5
+RAG_MAX_PROMPT_FILES=4
+RAG_MAX_PROMPT_IMAGES=2
+RAG_CHUNK_SIZE=1800
+RAG_CHUNK_OVERLAP=200
 ```
 
 | Variable | Efecto |
 |---|---|
-| `SOFTIA_REASONING_EFFORT` | Más razonamiento mejora análisis pero sube latencia y costo. Actual: `high`. |
-| `SOFTIA_TOP_K_EVIDENCE` | Máx. chunks de evidencia por control. Más alto = más contexto, más costo, más ruido. |
-| `SOFTIA_TOP_K_GLOBAL_CONTEXT` | Chunks globales por control. |
-| `SOFTIA_TOP_K_GLOSSARY` | Máx. términos de glosario recuperados. |
-| `SOFTIA_MAX_PROMPT_FILES` | Máx. archivos adjuntados como `input_file` por control. |
-| `SOFTIA_MAX_PROMPT_IMAGES` | Máx. imágenes reales adjuntadas por control. |
-| `SOFTIA_CHUNK_SIZE` / `SOFTIA_CHUNK_OVERLAP` | Tamaño y solapamiento de chunks (caracteres). |
+| `RAG_REASONING_EFFORT` | Más razonamiento mejora análisis pero sube latencia y costo. Actual: `high`. |
+| `RAG_TOP_K_EVIDENCE` | Máx. chunks de evidencia por control. Más alto = más contexto, más costo, más ruido. |
+| `RAG_TOP_K_GLOBAL_CONTEXT` | Chunks globales por control. |
+| `RAG_TOP_K_GLOSSARY` | Máx. términos de glosario recuperados. |
+| `RAG_MAX_PROMPT_FILES` | Máx. archivos adjuntados como `input_file` por control. |
+| `RAG_MAX_PROMPT_IMAGES` | Máx. imágenes reales adjuntadas por control. |
+| `RAG_CHUNK_SIZE` / `RAG_CHUNK_OVERLAP` | Tamaño y solapamiento de chunks (caracteres). |
 
 > En entorno corporativo, `truststore.inject_into_ssl()` es necesario para que el cliente use el almacén de certificados del sistema.
 

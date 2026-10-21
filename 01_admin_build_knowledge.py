@@ -12,7 +12,7 @@ Only admins should run this notebook. It converts each Excel sheet into:
 - prueba profile embeddings under knowledge/_indexes/<METOD>/
 - glossary embeddings under knowledge/_indexes/_shared/
 
-In production, SOFTIA_KNOWLEDGE_BASE_DIR should point to:
+In production, RAG_KNOWLEDGE_BASE_DIR should point to:
 /dbfs/FileStore/gestor_obs/knowledge
 """
 
@@ -50,7 +50,7 @@ try:
     dbutils.widgets.dropdown("rebuild_embeddings", "false", ["false", "true"], "Rebuild embeddings")
     dbutils.widgets.text(
         "knowledge_base_dir",
-        os.getenv("SOFTIA_KNOWLEDGE_BASE_DIR", "/dbfs/FileStore/gestor_obs/knowledge"),
+        os.getenv("RAG_KNOWLEDGE_BASE_DIR", "/dbfs/FileStore/gestor_obs/knowledge"),
         "Knowledge base dir",
     )
 except NameError:

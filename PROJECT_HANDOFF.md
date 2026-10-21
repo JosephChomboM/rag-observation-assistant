@@ -197,16 +197,16 @@ AZURE_OPENAI_ENDPOINT=https://<recurso>.openai.azure.com/
 AZURE_OPENAI_CHAT_DEPLOYMENT=OAIXXX05
 AZURE_OPENAI_EMBEDDING_DEPLOYMENT=OAIXXX04
 
-SOFTIA_KNOWLEDGE_BASE_DIR=/dbfs/FileStore/gestor_obs/knowledge
+RAG_KNOWLEDGE_BASE_DIR=/dbfs/FileStore/gestor_obs/knowledge
 
-SOFTIA_REASONING_EFFORT=high
-SOFTIA_TOP_K_EVIDENCE=8
-SOFTIA_TOP_K_GLOBAL_CONTEXT=4
-SOFTIA_TOP_K_GLOSSARY=5
-SOFTIA_MAX_PROMPT_FILES=4
-SOFTIA_MAX_PROMPT_IMAGES=2
-SOFTIA_CHUNK_SIZE=1800
-SOFTIA_CHUNK_OVERLAP=200
+RAG_REASONING_EFFORT=high
+RAG_TOP_K_EVIDENCE=8
+RAG_TOP_K_GLOBAL_CONTEXT=4
+RAG_TOP_K_GLOSSARY=5
+RAG_MAX_PROMPT_FILES=4
+RAG_MAX_PROMPT_IMAGES=2
+RAG_CHUNK_SIZE=1800
+RAG_CHUNK_OVERLAP=200
 ```
 
 Cada variable identifica un unico deployment:
@@ -232,14 +232,14 @@ truststore.inject_into_ssl()
 
 | Variable | Efecto |
 |---|---|
-| `SOFTIA_REASONING_EFFORT` | Mayor razonamiento puede mejorar analisis, pero aumenta latencia y consumo. Actualmente `high`. |
-| `SOFTIA_TOP_K_EVIDENCE` | Cantidad maxima de chunks de evidencia enviados por control. Mas alto aumenta contexto y costo, y puede agregar ruido. |
-| `SOFTIA_TOP_K_GLOBAL_CONTEXT` | Cantidad de chunks globales enviados por control. |
-| `SOFTIA_TOP_K_GLOSSARY` | Cantidad maxima de terminos recuperados. |
-| `SOFTIA_MAX_PROMPT_FILES` | Cantidad maxima de archivos relevantes adjuntados como `input_file` por control. |
-| `SOFTIA_MAX_PROMPT_IMAGES` | Cantidad maxima de imagenes reales adjuntadas por prueba. |
-| `SOFTIA_CHUNK_SIZE` | Tamano de cada chunk en caracteres. |
-| `SOFTIA_CHUNK_OVERLAP` | Solapamiento en caracteres entre chunks consecutivos. |
+| `RAG_REASONING_EFFORT` | Mayor razonamiento puede mejorar analisis, pero aumenta latencia y consumo. Actualmente `high`. |
+| `RAG_TOP_K_EVIDENCE` | Cantidad maxima de chunks de evidencia enviados por control. Mas alto aumenta contexto y costo, y puede agregar ruido. |
+| `RAG_TOP_K_GLOBAL_CONTEXT` | Cantidad de chunks globales enviados por control. |
+| `RAG_TOP_K_GLOSSARY` | Cantidad maxima de terminos recuperados. |
+| `RAG_MAX_PROMPT_FILES` | Cantidad maxima de archivos relevantes adjuntados como `input_file` por control. |
+| `RAG_MAX_PROMPT_IMAGES` | Cantidad maxima de imagenes reales adjuntadas por prueba. |
+| `RAG_CHUNK_SIZE` | Tamano de cada chunk en caracteres. |
+| `RAG_CHUNK_OVERLAP` | Solapamiento en caracteres entre chunks consecutivos. |
 
 ## 8. Rutas de Databricks
 
@@ -363,9 +363,9 @@ Proceso:
 8. Genera chunks y reutiliza embeddings por hash cuando no hubo cambios.
 9. Para cada prueba, reutiliza el embedding de su perfil como query.
 10. Recupera evidencia, contexto global y glosario.
-11. Selecciona archivos fuente relevantes de `inputs/<METOD>/` y `inputs/_global/` y adjunta como maximo `SOFTIA_MAX_PROMPT_FILES`.
+11. Selecciona archivos fuente relevantes de `inputs/<METOD>/` y `inputs/_global/` y adjunta como maximo `RAG_MAX_PROMPT_FILES`.
 12. Sube los archivos seleccionados con Files API y `purpose="assistants"`; conserva los formatos originales y cambia solamente `.sas` a `.txt`.
-13. Convierte como maximo `SOFTIA_MAX_PROMPT_IMAGES` imagenes recuperadas a base64.
+13. Convierte como maximo `RAG_MAX_PROMPT_IMAGES` imagenes recuperadas a base64.
 14. Construye el input con el Markdown completo de la prueba.
 15. Ejecuta una llamada `responses.parse` por prueba.
 16. Valida la criticidad y los IDs de controles devueltos.
@@ -478,7 +478,6 @@ No confundir estos artefactos con el nucleo productivo:
 - `metod_rag_observation_generator.py`: MVP monolitico anterior.
 - `project_doc.md`: documentacion de una etapa anterior del MVP.
 - `seed_metod_test_files.py`: fixtures del prototipo anterior.
-- `base64toimage/`: utilidad/experimento de conversion de imagenes.
 - `experiment/` y `test.ipynb`: notebooks exploratorios.
 - `tests/`: pruebas creadas anteriormente, pero no forman parte del flujo operativo solicitado actualmente.
 - `knowledge/METOD5/*.md`: conocimiento del experimento anterior, no el layout generado por el Excel de produccion.

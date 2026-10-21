@@ -149,7 +149,7 @@ El contenido corresponde a un checklist metodológico para validar modelos de ri
 ### Réplica de la master table
 
 - **Fila 22**: Se revisan los filtros previos de la llave primaria, desde la generación de la tabla. Ejemplo: codclavecic != 0
-- **Fila 23**: Se revisan los codmes usados en cada tabla, las fechas de actualización de cada tabla (los rezagos), la llave utilizada para los joins y si los joins de las tablas se hacen respetando los rezagos que corresponden. Para el caso de fuentes RCC y BCP, se considera el mejor rezago posible vigente. Caso contrario, se valida un plan con el que tendrán la información con el mejor rezago posible productivizada
+- **Fila 23**: Se revisan los codmes usados en cada tabla, las fechas de actualización de cada tabla (los rezagos), la llave utilizada para los joins y si los joins de las tablas se hacen respetando los rezagos que corresponden. Para el caso de fuentes externas (bureau crediticio) e internas del banco, se considera el mejor rezago posible vigente. Caso contrario, se valida un plan con el que tendrán la información con el mejor rezago posible productivizada
 - **Fila 24**: Se valida que en los cruces realizados entre las bases inputs de la master table, no se pierde información, y que los cruces realizados son correctos.
 - **Fila 25**: Se verifica que las variables finalistas del modelo son todas implementables según su definición funcional.
 - **Fila 26**: La master table replicada coincide con la master table usada en la construcción del modelo

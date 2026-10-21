@@ -43,7 +43,7 @@
     },
     {
         "term": "mmgr",
-        "definition": "Equipo de modeladores de riesgo crediticio del BCP encargado del desarrollo y monitoreo de modelos de riesgo. Se le realiza la auditoría respectiva (validación metodológica).",
+        "definition": "Equipo de modeladores de riesgo crediticio de la organización encargado del desarrollo y monitoreo de modelos de riesgo. Se le realiza la auditoría respectiva (validación metodológica).",
         "aliases": [
             "fabrica",
             "metologia de modelamiento de gestion de riesgo",
@@ -56,7 +56,7 @@
     },
     {
         "term": "mrm",
-        "definition": "Equipo de validadores de riesgo crediticio del BCP encargado de la validación metodológica y de seguimiento de modelos de riesgo.",
+        "definition": "Equipo de validadores de riesgo crediticio de la organización encargado de la validación metodológica y de seguimiento de modelos de riesgo.",
         "aliases": [
             "validadores",
             "equipo de validadores",
